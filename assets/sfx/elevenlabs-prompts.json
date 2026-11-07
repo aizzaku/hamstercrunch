@@ -1,0 +1,10 @@
+{
+  "provider": "ElevenLabs",
+  "model": "eleven_text_to_sound_v2",
+  "duration_seconds": 1.2,
+  "prompts": {
+    "asmr-cookie": "Studio food foley: one crisp buttery shortbread biscuit snapped in half by hand, followed by a brief dry crumble of tiny crumbs. Close microphone ASMR, natural detailed texture, clean isolated crunchy crack, short decay, begins immediately. No speech, no music, no breathing, no mouth noises, no reverberation.",
+    "asmr-cracker": "A single close-microphone ASMR foley sound of a very crisp thin baked cracker snapping and crunching into flakes. A satisfying sharp brittle crack, delicate papery crackles and tiny dry crumbs. One isolated quick action starting immediately with a short clean decay. Hyperreal kitchen recording, no voice, no music, no breathing, no chewing, no wet mouth noises, no room echo, no synthetic effect.",
+    "asmr-chocolate": "A single close-microphone ASMR foley sound of a thick dark chocolate biscuit being broken by hand. A rich firm low crunchy snap, a couple of small crisp fractures, dense crumbly texture and a very short satisfying dry finish. One isolated action starting immediately. Realistic intimate food foley, no voice, no music, no breath, no chewing, no wet mouth sounds, no reverb, no electronic tones."
+  }
+}
