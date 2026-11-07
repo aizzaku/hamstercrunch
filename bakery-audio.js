@@ -17,7 +17,7 @@ const BakeryAudio=(()=>{
     context=audio;buffers.clear();lastPlayed.clear();voices=0;
     const compressor=audio.createDynamicsCompressor();
     compressor.threshold.value=-16;compressor.knee.value=18;compressor.ratio.value=4;compressor.attack.value=.003;compressor.release.value=.15;
-    output=audio.createGain();output.gain.value=.6;output.connect(compressor);compressor.connect(audio.destination);
+    output=audio.createGain();output.gain.value=.3;output.connect(compressor);compressor.connect(audio.destination);
     loading=Promise.all(Object.entries(files).map(async([name,url])=>{
       const response=await fetch(url);
       if(!response.ok)throw new Error(`Could not load ${name} crunch: HTTP ${response.status}`);
@@ -53,6 +53,6 @@ const BakeryAudio=(()=>{
       oscillator.connect(gain);gain.connect(output);oscillator.onended=()=>{oscillator.disconnect();gain.disconnect();};oscillator.start();oscillator.stop(audio.currentTime+Math.max(.12,duration));
     }
   }
-  function setMuted(muted){if(output)output.gain.value=muted?0:.6;}
+  function setMuted(muted){if(output)output.gain.value=muted?0:.3;}
   return {play,load,cue,setMuted,profiles,files};
 })();

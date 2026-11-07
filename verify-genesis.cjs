@@ -72,5 +72,12 @@ check('Campaign HUD shows all 21 levels and chapter',`loadLevel(20);ui.level.tex
   check('New run ignores a canceled handshake',`reset();action();reset();state==='ready'`);
   accept(100);await Promise.resolve();
   check('Late server reply cannot restart a reset game',`state==='ready'&&!started&&recipeRunId===null`);
+  context.startCounters={effects:0,music:0};
+  context.enableSound=()=>{context.startCounters.effects++;};context.BurrowRadio={start:()=>{context.startCounters.music++;}};
+  check('First interaction enables both audio channels only once',`defaultAudioStarted=false;soundEnabled=true;startDefaultAudio({type:'pointerdown',target:{closest:()=>null}});startDefaultAudio({type:'keydown',key:'a',target:{closest:()=>null}});startCounters.effects===1&&startCounters.music===1`);
+  check('First tap on Sound respects its own toggle',`defaultAudioStarted=false;startDefaultAudio({type:'pointerdown',target:{closest:q=>q==='#sound'}});startCounters.effects===1&&startCounters.music===2`);
+  check('First tap on radio Play cannot double toggle music',`defaultAudioStarted=false;startDefaultAudio({type:'pointerdown',target:{closest:q=>q==='#radio-play'}});startCounters.effects===2&&startCounters.music===2`);
+  check('Explosions keep camera motion below one logical pixel',`reset();state='playing';hitBrick(bricks.find(b=>b.explosive),balls[0]);shake>0&&shake<=.75`);
+  check('Zoomies uses a tiny camera nudge',`state='playing';zoomCharge=100;activateZoomies();shake===.6`);
   console.log(`${count} Genesis gameplay checks passed.`);
 })().catch(error=>{console.error(error);process.exitCode=1;});

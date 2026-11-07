@@ -12,17 +12,19 @@ check('Rolling pin preserves shape without stretching',rolling.width===140&&roll
 const backing=vm.runInContext('backingSize(1200,840,2)',artContext);
 check('Retina canvas uses screen-sized backing pixels',backing.width===2400&&backing.height===1680);
 check('Canvas density is bounded for memory use',vm.runInContext('backingSize(800,560,8).width===2400',artContext));
-const requests=[],decoded=[],sources=[],parameters=[];
+const requests=[],decoded=[],sources=[],parameters=[],gains=[];
 const context=vm.createContext({console,fetch:async url=>{requests.push(url);return {ok:true,arrayBuffer:async()=>({url})};}});
 vm.runInContext(fs.readFileSync('bakery-audio.js','utf8'),context);
 const bakeryAudio=vm.runInContext('BakeryAudio',context);
 function parameter(){return {value:0,setValueAtTime(v,t){parameters.push([v,t]);},exponentialRampToValueAtTime(v,t){parameters.push([v,t]);},linearRampToValueAtTime(v,t){parameters.push([v,t]);}};}
 function node(){return {connect(){},disconnect(){},gain:parameter(),frequency:parameter(),Q:parameter(),playbackRate:parameter(),start(){},stop(){}};}
-const audio={state:'running',currentTime:0,destination:{},createGain:node,createDynamicsCompressor(){return {...node(),threshold:parameter(),knee:parameter(),ratio:parameter(),attack:parameter(),release:parameter()};},async decodeAudioData(bytes){const buffer={duration:1.2,url:bytes.url};decoded.push(buffer);return buffer;},createBufferSource(){const source=node();sources.push(source);return source;}};
+const audio={state:'running',currentTime:0,destination:{},createGain(){const gain=node();gains.push(gain);return gain;},createDynamicsCompressor(){return {...node(),threshold:parameter(),knee:parameter(),ratio:parameter(),attack:parameter(),release:parameter()};},async decodeAudioData(bytes){const buffer={duration:1.2,url:bytes.url};decoded.push(buffer);return buffer;},createBufferSource(){const source=node();sources.push(source);return source;}};
 (async()=>{
   check('Sound waits for an active context and loaded clips',!bakeryAudio.play(null,'butter')&&!bakeryAudio.play(audio,'butter'));
   await bakeryAudio.load(audio);await bakeryAudio.load(audio);
   check('Three approved ElevenLabs clips load and decode only once',requests.length===3&&decoded.length===3&&requests.every(url=>url.startsWith('assets/sfx/asmr-')));
+  check('ASMR output is half the previous master level',gains[0].gain.value===.3);
+  bakeryAudio.setMuted(true);bakeryAudio.setMuted(false);check('Unmuting keeps the quieter output',gains[0].gain.value===.3);
   check('Food mappings preserve five distinct playback profiles',new Set(['butter','cracker','sugar','jam','chocolate'].map(k=>JSON.stringify(bakeryAudio.profiles[k]))).size===5);
   check('Cracker impacts play the approved cracker buffer',bakeryAudio.play(audio,'cracker')&&sources[0].buffer===decoded.find(b=>b.url.includes('asmr-cracker')));
   check('Chain reactions throttle repeated samples',!bakeryAudio.play(audio,'cracker')&&sources.length===1);

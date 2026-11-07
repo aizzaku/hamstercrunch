@@ -17,7 +17,7 @@ let bricks=[],obstacles=[],balls=[],particles=[],drops=[],splits=[];
 let score=0,lives=3,level=0,state='intro',lastTime=0,accumulator=0;
 let runTime=0,levelTime=0,worldTime=0,combo=0,comboLeft=0,kills=0,powerCursor=0;
 let wideLeft=0,slowLeft=0,fireLeft=0,shield=false,shake=0,toastLeft=0,started=false,saved=false;
-let soundEnabled=false,audio=null,storageWarning=false,records=readRecords();
+let soundEnabled=true,audio=null,storageWarning=false,records=readRecords();
 let zoomCharge=0,zoomLeft=0,menuPaused=false,cleanupAnnounced=false;
 let recipeRunId=null,specialBatch=null;
 function currentLayout(){return specialBatch?specialLayout(specialBatch.seed):LEVELS[level];}
@@ -25,7 +25,7 @@ function startSpecialBatch(batch){reset();specialBatch=batch;loadLevel(0);overla
 function piercing(){return fireLeft>0||zoomLeft>0;}
 function activateZoomies(){
   if(state!=='playing'||zoomCharge<100||zoomLeft>0)return false;
-  zoomCharge=0;zoomLeft=5;shake=4;notify('ZOOMIES · Pierce for 5s');tone(1100,.25,'triangle');sync();return true;
+  zoomCharge=0;zoomLeft=5;shake=.6;notify('ZOOMIES · Pierce for 5s');tone(1100,.25,'triangle');sync();return true;
 }
 function openMenu(){menuPaused=state==='playing';if(menuPaused)pause();ui.details.showModal();}
 function closeMenu(){ui.details.close();}
@@ -66,8 +66,12 @@ function foodSound(brick,damaged=false){
 async function toggleSound() {
   if(ui.sound.disabled)return;
   if(soundEnabled){soundEnabled=false;BakeryAudio.setMuted(true);ui.sound.textContent='♪ Sound off';ui.sound.setAttribute('aria-pressed','false');return;}
-  ui.sound.disabled=true;ui.sound.textContent='♪ Loading crunches…';
-  try {if(!audio){const AudioEngine=window.AudioContext||window.webkitAudioContext;if(!AudioEngine){notify('Sound unavailable.');return;}audio=new AudioEngine();}await audio.resume();await BakeryAudio.load(audio);BakeryAudio.setMuted(false);soundEnabled=true;ui.sound.textContent='♪ ASMR sound on';ui.sound.setAttribute('aria-pressed','true');BakeryAudio.play(audio,'butter');notify('Crunches on');}
+  await enableSound(true);
+}
+async function enableSound(preview=false){
+  if(ui.sound.disabled)return;
+  ui.sound.disabled=true;ui.sound.textContent='♪ Loading…';
+  try {if(!audio){const AudioEngine=window.AudioContext||window.webkitAudioContext;if(!AudioEngine){soundEnabled=false;notify('Sound unavailable.');return;}audio=new AudioEngine();}await audio.resume();await BakeryAudio.load(audio);BakeryAudio.setMuted(false);soundEnabled=true;ui.sound.textContent='♪ ASMR sound on';ui.sound.setAttribute('aria-pressed','true');if(preview){BakeryAudio.play(audio,'butter');notify('Crunches on');}}
   catch(error){soundEnabled=false;console.warn('Audio could not start:',error);notify('Sound unavailable. Tap to retry.');}
   finally{ui.sound.disabled=false;if(!soundEnabled){ui.sound.textContent='♪ Sound off';ui.sound.setAttribute('aria-pressed','false');}}
 }
@@ -163,13 +167,13 @@ function hitBrick(b,hamster,blast=false) {
   if(!b.alive)return;
   b.hp-=blast?b.hp:piercing()?3:1;
   if(!blast&&zoomLeft<=0)zoomCharge=Math.min(100,zoomCharge+10);
-  burst(hamster.x,hamster.y,b.explosive?'#ff9d6f':COLORS[b.row%COLORS.length],b.hp>0?4:10);shake=Math.max(shake,b.hp>0?1.2:2.8);
+  burst(hamster.x,hamster.y,b.explosive?'#ff9d6f':COLORS[b.row%COLORS.length],b.hp>0?4:10);shake=Math.max(shake,b.hp>0?.18:.42);
   if(b.hp>0){foodSound(b,true);return;}
   b.alive=false;combo=comboLeft>0?Math.min(combo+1,8):1;comboLeft=2.5;score+=10*combo;kills++;
   foodSound(b);
   if(kills%4===0){const power=POWERS[powerCursor%POWERS.length];powerCursor++;drops.push({x:b.x+b.w/2,y:b.y+b.h/2,power});}
   if(b.explosive){
-    burst(b.x+b.w/2,b.y+b.h/2,'#ff9d6f',24);shake=5;
+    burst(b.x+b.w/2,b.y+b.h/2,'#ff9d6f',24);shake=.75;
     // Marking the crate dead first makes recursive chains finite.
     for(const nearby of bricks){if(nearby.alive&&Math.abs(nearby.x-b.x)<=92&&Math.abs(nearby.y-b.y)<=35)hitBrick(nearby,{x:nearby.x+nearby.w/2,y:nearby.y+nearby.h/2},true);}
   }
@@ -199,7 +203,7 @@ function step(dt) {
   paddle.x=Math.max(0,Math.min(W-paddle.w,paddle.x+move*560*dt));
   if(started){runTime+=dt;levelTime+=dt;}
   if(state==='ready'){dock();sync();return;}
-  worldTime+=dt;wideLeft=Math.max(0,wideLeft-dt);slowLeft=Math.max(0,slowLeft-dt);fireLeft=Math.max(0,fireLeft-dt);zoomLeft=Math.max(0,zoomLeft-dt);comboLeft=Math.max(0,comboLeft-dt);shake=Math.max(0,shake-dt*16);
+  worldTime+=dt;wideLeft=Math.max(0,wideLeft-dt);slowLeft=Math.max(0,slowLeft-dt);fireLeft=Math.max(0,fireLeft-dt);zoomLeft=Math.max(0,zoomLeft-dt);comboLeft=Math.max(0,comboLeft-dt);shake=Math.max(0,shake-dt*24);
   if(!wideLeft&&paddle.w!==currentLayout().width){const center=paddle.x+paddle.w/2;paddle.w=currentLayout().width;paddle.x=Math.max(0,Math.min(W-paddle.w,center-paddle.w/2));}
   obstacles.forEach(o=>{if(o.moving)o.x=o.baseX+Math.sin(worldTime*1.1+o.phase)*90;});
   for(const b of balls){
@@ -281,3 +285,15 @@ ui.zoomies.addEventListener('click',()=>{activateZoomies();canvas.focus();});ui.
 ui.details.addEventListener('close',()=>{keys.clear();if(menuPaused&&state==='paused')action();menuPaused=false;canvas.focus();});
 document.addEventListener('fullscreenchange',()=>{ui.fullscreen.textContent=document.fullscreenElement?'⤡ EXIT FULLSCREEN':'⛶ FULLSCREEN';});
 renderRecords();reset(true);requestAnimationFrame(frame);
+
+// Browser autoplay rules require a gesture. Start once, then respect manual toggles.
+let defaultAudioStarted=false;
+function startDefaultAudio(event){
+  if(defaultAudioStarted||event.repeat||event.ctrlKey||event.metaKey||event.altKey)return;
+  if(event.type==='keydown'&&['Tab','Escape','Shift','Control','Alt','Meta'].includes(event.key))return;
+  defaultAudioStarted=true;
+  if(soundEnabled&&!event.target?.closest?.('#sound'))enableSound();
+  if(typeof BurrowRadio!=='undefined'&&!event.target?.closest?.('#radio-play'))BurrowRadio.start();
+}
+document.addEventListener('pointerdown',startDefaultAudio,true);
+document.addEventListener('keydown',startDefaultAudio,true);
