@@ -4,12 +4,12 @@ const ui = Object.fromEntries(['score','lives','remaining','overlay','status','m
 const W=800,H=560,STEP=1/240;
 const COLORS=['#d0f36a','#b3cf70','#edca7b','#d69266','#a4b9a0','#dbb7c8'];
 const POWERS=[
-  {id:'wide',icon:'↔',name:'BIG PAWS',color:'#d0f36a',description:'A wider paddle for 14 seconds.'},
-  {id:'slow',icon:'◷',name:'SLOW MO',color:'#8edbd4',description:'Take a breath. Slower hamsters for 12 seconds.'},
-  {id:'multi',icon:'×3',name:'HAMSTER PARTY',color:'#edca7b',description:'Three hamsters. Triple the trouble.'},
-  {id:'fire',icon:'✦',name:'HOT CHEEKS',color:'#ff9d6f',description:'Smash straight through bricks for 10 seconds.'},
-  {id:'shield',icon:'═',name:'SAFETY NET',color:'#b8b2f4',description:'One rescue bounce from the floor.'},
-  {id:'heart',icon:'♥',name:'SECOND HELPING',color:'#f1a3bb',description:'One extra life, up to five.'},
+  {id:'wide',icon:'↔',name:'BIG PAWS',color:'#d0f36a',description:'Wider paddle · 14s'},
+  {id:'slow',icon:'◷',name:'SLOW MO',color:'#8edbd4',description:'Slow motion · 12s'},
+  {id:'multi',icon:'×3',name:'HAMSTER PARTY',color:'#edca7b',description:'Extra hamsters'},
+  {id:'fire',icon:'✦',name:'HOT CHEEKS',color:'#ff9d6f',description:'Piercing · 10s'},
+  {id:'shield',icon:'═',name:'SAFETY NET',color:'#b8b2f4',description:'One floor rescue'},
+  {id:'heart',icon:'♥',name:'SECOND HELPING',color:'#f1a3bb',description:'+1 life · max 5'},
 ];
 const paddle={x:338,y:516,w:124,h:14};
 const keys=new Set();
@@ -21,17 +21,17 @@ let soundEnabled=false,audio=null,storageWarning=false,records=readRecords();
 let zoomCharge=0,zoomLeft=0,menuPaused=false,cleanupAnnounced=false;
 let recipeRunId=null,specialBatch=null;
 function currentLayout(){return specialBatch?specialLayout(specialBatch.seed):LEVELS[level];}
-function startSpecialBatch(batch){reset();specialBatch=batch;loadLevel(0);overlay("SQUEEKTOSHI’S SPECIAL BATCH","A special<br>little batch.","One shared tray. Clear it to bring home the featured ingredient. Campaign records stay separate.","LET’S CRUNCH");}
+function startSpecialBatch(batch){reset();specialBatch=batch;loadLevel(0);overlay("SQUEEKTOSHI’S SPECIAL BATCH","A special<br>little batch.","Clear the tray. Earn ingredients.","LET’S CRUNCH");}
 function piercing(){return fireLeft>0||zoomLeft>0;}
 function activateZoomies(){
   if(state!=='playing'||zoomCharge<100||zoomLeft>0)return false;
-  zoomCharge=0;zoomLeft=5;shake=4;notify('ZOOMIES! · Five seconds of hamster havoc');tone(1100,.25,'triangle');sync();return true;
+  zoomCharge=0;zoomLeft=5;shake=4;notify('ZOOMIES · Pierce for 5s');tone(1100,.25,'triangle');sync();return true;
 }
 function openMenu(){menuPaused=state==='playing';if(menuPaused)pause();ui.details.showModal();}
 function closeMenu(){ui.details.close();}
 async function fullscreen(){
-  try{if(document.fullscreenElement)await document.exitFullscreen();else if(document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen();else notify('Fullscreen unavailable · try your browser’s fullscreen control');}
-  catch(error){console.warn('Fullscreen could not start:',error);notify('Fullscreen unavailable in this preview');}
+  try{if(document.fullscreenElement)await document.exitFullscreen();else if(document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen();else notify('Use your browser’s fullscreen control.');}
+  catch(error){console.warn('Fullscreen could not start:',error);notify('Fullscreen unavailable.');}
 }
 
 function formatTime(seconds) {const t=Math.floor(seconds*10);return `${String(Math.floor(t/600)).padStart(2,'0')}:${String(Math.floor(t/10)%60).padStart(2,'0')}.${t%10}`;}
@@ -42,7 +42,7 @@ function readRecords() {
 }
 function renderRecords() {
   ui.records.replaceChildren();
-  if (!records.length) {ui.records.textContent='Your first run belongs here. Finish a run to set a time.';return;}
+  if (!records.length) {ui.records.textContent='Finish a run to set a time.';return;}
   records.forEach((record,i)=>{const row=document.createElement('div');row.className='record-row';const rank=document.createElement('span');rank.textContent=String(i+1).padStart(2,'0');const progress=document.createElement('span');progress.textContent=record.reached===LEVELS.length?`ALL ${LEVELS.length} CLEARED`:`LEVEL ${Math.min(LEVELS.length,record.reached+1)} · ${record.reached} CLEARED`;const time=document.createElement('strong');time.textContent=formatTime(record.time);row.append(rank,progress,time);ui.records.append(row);});
 }
 function saveRun() {
@@ -52,7 +52,7 @@ function saveRun() {
   try {localStorage.setItem('hamster-crunch-genesis-21-v1',JSON.stringify(records));}
   catch(error) {storageWarning=true;console.warn('Local records could not be saved:',error);}
   renderRecords();
-  if(storageWarning)notify('Storage unavailable · this record lasts until reload');
+  if(storageWarning)notify('Storage unavailable · record saved for this visit');
 }
 function tone(freq=500,duration=.05,type='sine',volume=.025) {
   if(!soundEnabled || !audio) return;
@@ -67,8 +67,8 @@ async function toggleSound() {
   if(ui.sound.disabled)return;
   if(soundEnabled){soundEnabled=false;BakeryAudio.setMuted(true);ui.sound.textContent='♪ Sound off';ui.sound.setAttribute('aria-pressed','false');return;}
   ui.sound.disabled=true;ui.sound.textContent='♪ Loading crunches…';
-  try {if(!audio){const AudioEngine=window.AudioContext||window.webkitAudioContext;if(!AudioEngine){notify('Sound is unavailable in this browser');return;}audio=new AudioEngine();}await audio.resume();await BakeryAudio.load(audio);BakeryAudio.setMuted(false);soundEnabled=true;ui.sound.textContent='♪ ASMR sound on';ui.sound.setAttribute('aria-pressed','true');BakeryAudio.play(audio,'butter');notify('ElevenLabs ASMR crunches ready');}
-  catch(error){soundEnabled=false;console.warn('Audio could not start:',error);notify('ASMR sounds could not load. Tap Sound to retry.');}
+  try {if(!audio){const AudioEngine=window.AudioContext||window.webkitAudioContext;if(!AudioEngine){notify('Sound unavailable.');return;}audio=new AudioEngine();}await audio.resume();await BakeryAudio.load(audio);BakeryAudio.setMuted(false);soundEnabled=true;ui.sound.textContent='♪ ASMR sound on';ui.sound.setAttribute('aria-pressed','true');BakeryAudio.play(audio,'butter');notify('Crunches on');}
+  catch(error){soundEnabled=false;console.warn('Audio could not start:',error);notify('Sound unavailable. Tap to retry.');}
   finally{ui.sound.disabled=false;if(!soundEnabled){ui.sound.textContent='♪ Sound off';ui.sound.setAttribute('aria-pressed','false');}}
 }
 function sync() {
@@ -88,7 +88,7 @@ function sync() {
   if(fireLeft>0)active.push(`✦ HOT CHEEKS ${Math.ceil(fireLeft)}s`);
   if(shield)active.push('═ NET READY');
   if(balls.length>1)active.push(`×${balls.length} HAMSTERS`);
-  ui.effects.textContent=active.join(' · ')||'Catch falling snacks for power-ups';
+  ui.effects.textContent=active.join(' · ')||'Catch power-ups';
 }
 function overlay(status,title,hint,button) {
   ui.status.textContent=status;ui.message.innerHTML=title;ui.hint.textContent=hint;
@@ -107,7 +107,7 @@ function loadLevel(index) {
 function reset(showIntro=false) {
   if(started&&!saved)saveRun();
   ui.play.disabled=false;specialBatch=null;score=0;lives=3;runTime=0;splits=[];started=false;saved=false;shake=0;zoomCharge=0;recipeRunId=null;renderSplits();loadLevel(0);
-  if(showIntro){state='intro';overlay('Fresh out of the oven','Small hamster.<br>Big appetite.','Twenty-one warm batches. Three bakery chapters. Six little power-ups. One very hungry hamster. Let’s leave no crumb behind.','Let’s crunch');}
+  if(showIntro){state='intro';overlay('Fresh out of the oven','Small hamster.<br>Big appetite.','21 levels. 3 chapters. Let’s crunch.','Let’s crunch');}
 }
 function action() {
   if(state==='paused'){state='playing';ui.overlay.hidden=true;sync();return;}
@@ -118,7 +118,7 @@ function action() {
       const pending=specialBatch?RecipeProfile.startSpecial(specialBatch.seed):RecipeProfile.startRun();recipeRunId=pending;
       if(pending&&typeof pending.then==='function'){
         state='connecting';ui.play.disabled=true;
-        overlay('WARMING THE OVEN','One little<br>moment…','Opening your saved run before the timer starts.','CONNECTING');
+        overlay('WARMING THE OVEN','One little<br>moment…','Connecting…','CONNECTING');
         pending.then(id=>{if(state!=='connecting'||recipeRunId!==pending)return;recipeRunId=id;ui.play.disabled=false;beginPlay();})
           .catch(error=>{if(state!=='connecting'||recipeRunId!==pending)return;ui.play.disabled=false;state='ready';overlay('BAKERY CONNECTION PAUSED','Try<br>again?',error.message,'RETRY');});
         return;
@@ -129,24 +129,24 @@ function action() {
 }
 function beginPlay(){state='playing';started=true;ui.overlay.hidden=true;tone(600,.08);sync();}
 function pause() {
-  if(state==='playing'){state='paused';keys.clear();overlay('TAKE A BREATHER','Snack<br>break.','Timer paused. Your hamster is safe.','KEEP CRUNCHING');}
+  if(state==='playing'){state='paused';keys.clear();overlay('TAKE A BREATHER','Snack<br>break.','Timer paused.','KEEP CRUNCHING');}
   else if(state==='paused')action();
 }
 function renderSplits() {
   ui.splits.replaceChildren();
-  if(!splits.length){ui.splits.textContent='Clear a level to start your split times.';return;}
+  if(!splits.length){ui.splits.textContent='Clear a level for a split.';return;}
   splits.forEach((split,i)=>{const row=document.createElement('div');row.className='record-row';const label=document.createElement('span');label.textContent=`${String(i+1).padStart(2,'0')} ${LEVELS[i].name}`;const time=document.createElement('strong');time.textContent=formatTime(split);row.append(label,time);ui.splits.append(row);});
 }
 function finishLevel() {
   if(specialBatch){
     if(typeof RecipeProfile!=='undefined')RecipeProfile.awardSpecial(recipeRunId,runTime);
     state='won';saved=true;tone(1000,.25,'triangle');
-    overlay('SPECIAL BATCH CLEARED','Freshly<br>crunched!',`Tray cleared in ${formatTime(runTime)}. Your special reward is being saved. Return to the Recipe Box for the market.`,'BACK TO GENESIS');return;
+    overlay('SPECIAL BATCH CLEARED','Freshly<br>crunched!',`${formatTime(runTime)} · Saving reward…`,'BACK TO GENESIS');return;
   }
   if(typeof RecipeProfile!=='undefined')RecipeProfile.awardLevel(recipeRunId,level,runTime);
   splits.push(levelTime);renderSplits();tone(1000,.25,'triangle');
-  if(level===LEVELS.length-1){state='won';saveRun();overlay('GENESIS ERA · CLEAN PLATE','Genesis<br>crunched!',`All ${LEVELS.length} cleared in ${formatTime(runTime)}. ${score} points. Your run is saved locally; accepted clears also enter global rankings.`,'RUN IT BACK');}
-  else{state='cleared';overlay(`${(level+1)%7===0?'CHAPTER '+Math.ceil((level+1)/7)+' COMPLETE':'LEVEL '+(level+1)+' CLEARED'} · ${formatTime(levelTime)}`,'Not a<br>crumb left.',`Run time ${formatTime(runTime)}. Next: ${LEVELS[level+1].name}. Lives carry over; temporary power-ups reset.`,'NEXT LEVEL');}
+  if(level===LEVELS.length-1){state='won';saveRun();overlay('GENESIS ERA · CLEAN PLATE','Genesis<br>crunched!',`${LEVELS.length} cleared · ${formatTime(runTime)} · ${score} points`,'RUN IT BACK');}
+  else{state='cleared';overlay(`${(level+1)%7===0?'CHAPTER '+Math.ceil((level+1)/7)+' COMPLETE':'LEVEL '+(level+1)+' CLEARED'} · ${formatTime(levelTime)}`,'Not a<br>crumb left.',`${formatTime(runTime)} total · Next: ${LEVELS[level+1].name}`,'NEXT LEVEL');}
 }
 function burst(x,y,color,count=9) {for(let i=0;i<count;i++)particles.push({x,y,vx:(Math.random()-.5)*200,vy:(Math.random()-.5)*200,life:.45,color});}
 function applyPower(id) {
@@ -175,7 +175,7 @@ function hitBrick(b,hamster,blast=false) {
   }
   const remaining=bricks.filter(brick=>brick.alive).length;
   if(remaining===0&&state==='playing')finishLevel();
-  else if(remaining>0&&remaining<=3&&!cleanupAnnounced){cleanupAnnounced=true;notify('LAST CRUMBS · Paddle returns now help aim at the final bricks');}
+  else if(remaining>0&&remaining<=3&&!cleanupAnnounced){cleanupAnnounced=true;notify('LAST CRUMBS · Aim assist on');}
   sync();
 }
 function aimLastCrumbs(b){
@@ -194,7 +194,7 @@ function reflect(b,rect,px,py) {
   else{b.x=rect.x+rect.w+b.r;b.vx=Math.abs(b.vx);}
 }
 function step(dt) {
-  if((typeof Leaderboards!=='undefined'&&Leaderboards.isOpen())||ui.details.open||(typeof RecipeProfile!=='undefined'&&RecipeProfile.isOpen())||!['playing','ready'].includes(state))return;
+  if((typeof Onboarding!=='undefined'&&Onboarding.isOpen())||(typeof WalletUI!=='undefined'&&WalletUI.isOpen())||(typeof Leaderboards!=='undefined'&&Leaderboards.isOpen())||ui.details.open||(typeof RecipeProfile!=='undefined'&&RecipeProfile.isOpen())||!['playing','ready'].includes(state))return;
   const move=(keys.has('ArrowRight')||keys.has('d')?1:0)-(keys.has('ArrowLeft')||keys.has('a')?1:0);
   paddle.x=Math.max(0,Math.min(W-paddle.w,paddle.x+move*560*dt));
   if(started){runTime+=dt;levelTime+=dt;}
@@ -211,14 +211,14 @@ function step(dt) {
       const offset=Math.max(-1,Math.min(1,(b.x-paddle.x-paddle.w/2)/(paddle.w/2)));const angle=offset*Math.PI/3;const speed=currentLayout().speed;
       b.vx=speed*Math.sin(angle);if(Math.abs(b.vx)<35)b.vx=35*(offset<0?-1:1);b.vy=-Math.sqrt(speed**2-b.vx**2);b.y=paddle.y-b.r;aimLastCrumbs(b);combo=0;comboLeft=0;if(soundEnabled&&typeof BakeryAudio!=='undefined')BakeryAudio.play(audio,'wood');
     }
-    if(shield&&b.vy>0&&b.y+b.r>=H-12&&py+b.r<H-12){b.y=H-12-b.r;b.vy=-Math.abs(b.vy);shield=false;burst(b.x,H-12,'#b8b2f4',20);notify('NET SAVE! · Back for seconds');tone(650,.12);}
+    if(shield&&b.vy>0&&b.y+b.r>=H-12&&py+b.r<H-12){b.y=H-12-b.r;b.vy=-Math.abs(b.vy);shield=false;burst(b.x,H-12,'#b8b2f4',20);notify('NET SAVE!');tone(650,.12);}
     for(const o of obstacles){if(overlaps(b,o)){reflect(b,o,px,py);break;}}
     for(const brick of bricks){if(brick.alive&&overlaps(b,brick)){if(!piercing())reflect(b,brick,px,py);hitBrick(brick,b);if(!piercing()||state!=='playing')break;}}
     if(state!=='playing')break;
   }
   if(state!=='playing')return;
   balls=balls.filter(b=>b.y-b.r<=H);
-  if(!balls.length){lives--;clearEffects();paddle.w=currentLayout().width;paddle.x=Math.min(paddle.x,W-paddle.w);tone(110,.25,'triangle');if(!lives){state='lost';saveRun();overlay('THE HAMSTER GOT AWAY','Still<br>hungry?',`${splits.length} levels cleared · ${formatTime(runTime)} · ${score} points. Your run is on the local board.`,'TRY AGAIN');}else{state='ready';dock();notify('Shake it off. SPACE / TAP to relaunch');}sync();return;}
+  if(!balls.length){lives--;clearEffects();paddle.w=currentLayout().width;paddle.x=Math.min(paddle.x,W-paddle.w);tone(110,.25,'triangle');if(!lives){state='lost';saveRun();overlay('THE HAMSTER GOT AWAY','Still<br>hungry?',`${splits.length} cleared · ${formatTime(runTime)} · ${score} points`,'TRY AGAIN');}else{state='ready';dock();notify('SPACE / TAP to relaunch');}sync();return;}
   for(const drop of drops){drop.y+=125*dt;if(drop.y+12>=paddle.y&&drop.y-12<=paddle.y+paddle.h&&drop.x+12>paddle.x&&drop.x-12<paddle.x+paddle.w){applyPower(drop.power.id);drop.caught=true;}}
   drops=drops.filter(d=>!d.caught&&d.y<H+20);
   for(const p of particles){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=250*dt;p.life-=dt;}particles=particles.filter(p=>p.life>0);
@@ -267,7 +267,7 @@ function frame(time) {
 function pointer(event) {if(!['ready','playing'].includes(state))return;const rect=canvas.getBoundingClientRect();paddle.x=Math.max(0,Math.min(W-paddle.w,(event.clientX-rect.left)*W/rect.width-paddle.w/2));if(state==='ready')dock();}
 canvas.addEventListener('pointermove',pointer);canvas.addEventListener('pointerdown',event=>{pointer(event);canvas.focus();action();});
 document.addEventListener('keydown',event=>{
-  if((typeof Leaderboards!=='undefined'&&Leaderboards.isOpen())||(typeof RecipeProfile!=='undefined'&&RecipeProfile.isOpen()))return;
+  if((typeof Onboarding!=='undefined'&&Onboarding.isOpen())||(typeof WalletUI!=='undefined'&&WalletUI.isOpen())||(typeof Leaderboards!=='undefined'&&Leaderboards.isOpen())||(typeof RecipeProfile!=='undefined'&&RecipeProfile.isOpen()))return;
   if(event.target&&['INPUT','TEXTAREA','SELECT'].includes(event.target.tagName))return;
   if(event.target instanceof HTMLButtonElement&&[' ','Enter'].includes(event.key))return;
   const key=event.key.length===1?event.key.toLowerCase():event.key;if(['ArrowLeft','ArrowRight',' ','a','d','p','r'].includes(key))event.preventDefault();keys.add(key);if(event.repeat)return;

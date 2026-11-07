@@ -6,3 +6,6 @@ node_modules
 output
 *-preview.png
 assets/*-preview.*
+
+music
+npm-audit-review.json

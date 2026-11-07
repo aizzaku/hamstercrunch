@@ -6,7 +6,7 @@ Open **Recipe Box** in the header for Recipes, Pantry, Orders, Collection and Pr
 
 Each cleared level grants one basic ingredient, plus an independent 25% bonus-ingredient roll and 5% recipe-scrap roll. A bonus ingredient is guaranteed on the third dry clear; a scrap on the eighth. Two scraps reveal a recipe; missing recipes are selected to avoid useless duplicates. After the recipe book is complete, scrap drops grant stamps instead. Bonus ingredients favor recipe shortages. The run basket appears between levels and in Profile. Loot saves on each clear and survives run loss. Run/level receipts prevent duplicate or skipped-level rewards.
 
-Recipe progress now lives in server-side SQLite at `.local/bakery.sqlite`, identified by an opaque HttpOnly browser cookie. The existing `hamster-crunch-recipe-box-v1` browser save imports once and remains preserved locally. Keep the session cookie to return to the same profile; there is no cross-device account or recovery flow yet. Back up the SQLite file for hosting. New runs retain your pantry, food, recipes and orders. Roguelike upgrades are deferred.
+Recipe progress now lives in server-side SQLite at `.local/bakery.sqlite`, identified by an opaque HttpOnly browser cookie. The existing `hamster-crunch-recipe-box-v1` browser save imports once and remains preserved locally. Guest profiles return through the same browser cookie. Optional wallet sign-in links that bakery for recovery on another device. Back up the SQLite file for hosting. New runs retain your pantry, food, recipes and orders. Roguelike upgrades are deferred.
 
 The current visual theme is **Sunny Bakery**: illustrated biscuits, rolling-pin paddle, fluffy hamster, watercolor bakery backdrop and a strawberry-pink Burrow Radio. The arena still uses its original gameplay proportions and collision sizes. `bakery.css` and `bakery-render.js` provide the current theme; earlier styles remain as reference.
 
@@ -14,9 +14,9 @@ Rendering now sizes the canvas backing to its on-screen dimensions and device pi
 
 Enable **Sound on** for the approved ElevenLabs ASMR cookie, cracker and chocolate clips, with food-specific playback profiles. Voice limiting and compression keep chain reactions controlled. Effects remain separate from Burrow Radio.
 
-Artwork and music setup: [assets/README.md](assets/README.md). Radio controls are ready, but no music tracks have been supplied yet. Gameplay checks and radio/asset checks run with `npm test`.
+Artwork and music setup: [assets/README.md](assets/README.md). Burrow Radio includes 10 user-provided ElevenLabs tracks, a track selector, shuffle and saved volume. Gameplay checks and radio/asset checks run with `npm test`.
 
-A 21-level browser arcade campaign for the Genesis Era. Original canvas-drawn tumbling hamster, six power-ups, armored bricks, steel barriers, moving obstacles, combos, optional synthesized arcade audio, run timing and level splits. No npm dependencies or wallet. Requires Node 24+ with built-in `node:sqlite`; the server reads the public Squeekchain API.
+A 21-level browser arcade campaign for the Genesis Era. Original canvas-drawn tumbling hamster, six power-ups, armored bricks, steel barriers, moving obstacles, combos, optional synthesized arcade audio, run timing and level splits. Guest play is instant; optional wallet sign-in uses SIWE and the WalletConnect connector. Requires Node 24+ with built-in `node:sqlite`; the server reads the public Squeekchain API.
 
 Run `npm start`, then open http://127.0.0.1:4173.
 
@@ -74,3 +74,16 @@ Open **Rankings** for seven boards across Arcade, Bakery and Collection:
 Ranking rows show the profile’s baker name and an opaque public ID. Exact ties share a rank. Server-side SQLite keeps records across reloads and restarts. Legacy recipe imports retain inventory and collection cards, but do not inject imported cooking or collection totals into rankings. Existing server-owned sales and points count. The boards aggregate profiles on the same server; they become publicly shared when this server is deployed with persistent storage.
 
 Campaign records are scoped to `genesis-21-v1`. Clears require the issued run ID, consecutive levels and plausible elapsed times bounded by server wall time. This catches duplicate, skipped, nonfinite and impossible future-time submissions; it is not authoritative physics replay and does not prevent a modified client from inventing plausible runs. The leaderboard UI labels arcade timings as beta client reports. Stronger verification and account identity are required before prize-based competition.
+
+
+## First run, music and wallet saves
+
+New players get three skippable prompts: move, launch and catch power-ups. The Burrow menu can replay the tutorial. The first rewarded clear shows a single baking nudge. Gameplay timers freeze while tutorial, profile, rankings or wallet dialogs are open.
+
+Burrow Radio plays ten two-minute user-provided ElevenLabs MP3s from `assets/music`. Playback starts only on a player action. Tracks, shuffle and volume persist locally; previous follows listening history. MP3 endpoints support cached partial responses for seeking. Original files in the root `music` folder stay untouched and are excluded from the deploy context.
+
+**Save bakery** offers browser-wallet or mobile/QR WalletConnect sign-in. Only a server-generated, domain-bound, expiring SIWE message can link a save. Nonces are single-use, failed signatures consume their challenge, login rotates cookies and signatures require no transaction or gas. A wallet already linked to another bakery requires explicit restore confirmation; saves never merge. Logout starts a fresh guest while retaining the wallet save. One active campaign run per bakery remains the concurrency model.
+
+`site-config.json` holds the public Railway origin and public Reown project ID. `PUBLIC_ORIGIN` and `WALLETCONNECT_PROJECT_ID` override these defaults. Configure the production origin and Reown allowed domain together if the hostname changes. Browser extensions and WalletConnect support Ethereum EOA message signatures; smart contract wallet signature support has not been added. Wallet sign-in is identity/recovery, not proof of fair gameplay.
+
+Run `npm ci`, `npm run check`, `npm test`. If the connector source changes, run `npm run build:wallet` and include the generated `walletconnect-provider.js`. Docker installs locked runtime dependencies; the generated browser bundle is already included. `node verify-deploy.cjs` runs an isolated production-mode HTTP test with synthetic wallet signatures and a temporary database.

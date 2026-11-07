@@ -21,7 +21,7 @@ function createBakeryClient(storage,onChange){
     const result=queue.then(()=>ready).then(async()=>request('/api/profile',{action,args:await Promise.all(args)})).then(data=>data.result);
     queue=result.catch(()=>{});return result;
   }
-  return {snapshot:()=>profile,ready,request,
+  return {snapshot:()=>profile,ready,request,settle:()=>queue.then(()=>ready),
     startRun:()=>command('startRun'),awardLevel:(id,level,elapsed)=>command('awardLevel',[id,level,elapsed]),
     startSpecial:seed=>command('startSpecial',[seed]).then(result=>{if(!result.ok)throw new Error(result.message);return result.runId;}),
     awardSpecial:(id,elapsed)=>command('awardSpecial',[id,elapsed]),

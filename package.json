@@ -4,7 +4,17 @@
   "private": true,
   "scripts": {
     "start": "node server.cjs",
-    "check": "node --check levels.js && node --check bakery-art.js && node --check bakery-render.js && node --check bakery-audio.js && node --check radio.js && node --check engine.js && node --check recipe-core.js && node --check recipe-ui.js && node --check server.cjs && node --check verify-genesis.cjs && node --check verify-bakery.cjs && node --check verify-quality.cjs && node --check verify-recipes.cjs && node --check bakery-client.js && node --check bakery-service.cjs && node --check squeek-chain.cjs && node --check verify-chain.cjs && node --check verify-service.cjs && node --check verify-client.cjs && node --check leaderboard.js && node --check verify-levels.cjs && node --check verify-leaderboards.cjs && node --check verify-leaderboard-ui.cjs",
-    "test": "node verify-genesis.cjs && node verify-bakery.cjs && node verify-quality.cjs && node verify-recipes.cjs && node verify-chain.cjs && node verify-service.cjs && node verify-client.cjs && node verify-levels.cjs && node verify-leaderboards.cjs && node verify-leaderboard-ui.cjs"
+    "check": "node --check levels.js && node --check bakery-art.js && node --check bakery-render.js && node --check bakery-audio.js && node --check radio.js && node --check engine.js && node --check recipe-core.js && node --check recipe-ui.js && node --check server.cjs && node --check verify-genesis.cjs && node --check verify-bakery.cjs && node --check verify-quality.cjs && node --check verify-recipes.cjs && node --check bakery-client.js && node --check bakery-service.cjs && node --check squeek-chain.cjs && node --check verify-chain.cjs && node --check verify-service.cjs && node --check verify-client.cjs && node --check leaderboard.js && node --check verify-levels.cjs && node --check verify-leaderboards.cjs && node --check verify-leaderboard-ui.cjs && node --check wallet-auth.cjs && node --check wallet-ui.js && node --check onboarding.js && node --check verify-auth.cjs && node --check verify-radio.cjs && node --check verify-onboarding.cjs && node --check verify-wallet-ui.cjs",
+    "test": "node verify-genesis.cjs && node verify-bakery.cjs && node verify-quality.cjs && node verify-recipes.cjs && node verify-chain.cjs && node verify-service.cjs && node verify-client.cjs && node verify-levels.cjs && node verify-leaderboards.cjs && node verify-leaderboard-ui.cjs && node verify-auth.cjs && node verify-radio.cjs && node verify-onboarding.cjs && node verify-wallet-ui.cjs",
+    "build:wallet": "esbuild walletconnect-entry.js --bundle --format=iife --platform=browser --minify --outfile=walletconnect-provider.js"
+  },
+  "dependencies": {
+    "@walletconnect/universal-provider": "2.26.0",
+    "ethers": "6.17.0",
+    "qrcode": "1.5.4",
+    "siwe": "3.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
   }
 }

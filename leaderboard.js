@@ -10,13 +10,13 @@ const Leaderboards=(()=>{
   const tabs=[...document.querySelectorAll('[data-ranking-tab]')];
   const groups={arcade:['genesis','speed','special'],bakery:['cooks','sells','fortune'],collection:['collection']};
   const boards={
-    genesis:{name:'Genesis Champions',group:'arcade',description:'Highest level cleared first. Fastest cumulative time breaks ties.',empty:'Clear your first Genesis level to join the champions.',metric:'Run time'},
-    speed:{name:'Speed Bakers',group:'arcade',description:'The fastest complete 21-level Genesis runs.',empty:'Finish all 21 levels to set the first full-run time.',metric:'Finish time'},
-    special:{name:'Special Batch',group:'arcade',description:'Fastest clear of the current settlement’s shared tray.',empty:'Clear the current Special Batch to leave your mark.',metric:'Clear time'},
-    cooks:{name:'Master Bakers',group:'bakery',description:'Most individual treats baked. Every fresh batch counts.',empty:'Bake a batch in your Recipe Box to join this board.',metric:'Treats baked'},
-    sells:{name:'Busy Counter',group:'bakery',description:'Most individual treats sold while Squeektoshi runs.',empty:'Sell a treat during a live bakery opening to join.',metric:'Treats sold'},
-    fortune:{name:'Bakery Fortune',group:'bakery',description:'Lifetime Bakery Points earned. Spending never reduces this total.',empty:'Earn Bakery Points from your first live market sale.',metric:'Points earned'},
-    collection:{name:'Recipe Collectors',group:'collection',description:'Most unique recipes baked. Collect all twelve food cards.',empty:'Bake a recipe to begin your collection ranking.',metric:'Recipes baked'},
+    genesis:{name:'Genesis Champions',group:'arcade',description:'Highest clear. Fastest time breaks ties.',empty:'Clear a level to enter.',metric:'Run time'},
+    speed:{name:'Speed Bakers',group:'arcade',description:'Fastest 21-level finish.',empty:'Finish all 21 levels to enter.',metric:'Finish time'},
+    special:{name:'Special Batch',group:'arcade',description:'Fastest current Special Batch clear.',empty:'Clear the Special Batch to enter.',metric:'Clear time'},
+    cooks:{name:'Master Bakers',group:'bakery',description:'Most treats baked.',empty:'Bake a batch to enter.',metric:'Treats baked'},
+    sells:{name:'Busy Counter',group:'bakery',description:'Most treats sold.',empty:'Sell a treat to enter.',metric:'Treats sold'},
+    fortune:{name:'Bakery Fortune',group:'bakery',description:'Lifetime points earned.',empty:'Sell a treat to earn points.',metric:'Points earned'},
+    collection:{name:'Recipe Collectors',group:'collection',description:'Most unique recipes baked.',empty:'Bake a recipe to begin.',metric:'Recipes baked'},
   };
   let group='arcade',board='genesis',resume=false,controller=null,sequence=0;
   const number=value=>Number.isFinite(value)?Math.max(0,value).toLocaleString():'0';
@@ -35,7 +35,7 @@ const Leaderboards=(()=>{
   function renderRows(data){
     results.replaceChildren();
     const rows=Array.isArray(data.rows)?data.rows.slice(0,25):[];
-    if(!rows.length){const empty=el('div','rankings-empty');empty.append(el('span','ranking-empty-cookie','✿'),el('h3','','A fresh page in the recipe book'),el('p','',boards[board].empty));results.append(empty);return;}
+    if(!rows.length){const empty=el('div','rankings-empty');empty.append(el('span','ranking-empty-cookie','✿'),el('h3','','No scores yet'),el('p','',boards[board].empty));results.append(empty);return;}
     const table=el('table','ranking-table');table.setAttribute('aria-label',boards[board].name);
     const head=el('thead'),heading=el('tr');
     const headers=['Rank','Baker'];if(board==='genesis')headers.push('Level cleared');headers.push(boards[board].metric);
@@ -60,16 +60,16 @@ const Leaderboards=(()=>{
     if(controller)controller.abort();const requestController=new AbortController();controller=requestController;
     const request=++sequence,requestedBoard=board;
     const timeout=setTimeout(()=>requestController.abort(),12000);
-    panel.setAttribute('aria-busy','true');refresh.disabled=true;status.textContent='Checking the bakery noticeboard…';results.replaceChildren();
+    panel.setAttribute('aria-busy','true');refresh.disabled=true;status.textContent='Loading…';results.replaceChildren();
     try{
       const response=await fetch(`/api/leaderboards?board=${encodeURIComponent(requestedBoard)}`,{signal:requestController.signal,cache:'no-store'});
-      if(!response.ok)throw new Error('Rankings could not load. Please try again.');
+      if(!response.ok)throw new Error('Rankings unavailable. Retry.');
       const data=await response.json();if(request!==sequence)return;
-      renderRows(data);status.textContent='Top 25 bakers · refreshed just now';
+      renderRows(data);status.textContent='Top 25 · Updated';
     }catch(error){
       if(request!==sequence||!dialog.open)return;
-      status.textContent=error.name==='AbortError'?'The noticeboard took too long to answer. Refresh to retry.':'The noticeboard is unavailable. Your saved progress is safe.';
-      const retry=el('div','rankings-empty');retry.append(el('h3','','The noticeboard needs a moment'),el('p','','Use Refresh to try the connection again.'));results.replaceChildren(retry);
+      status.textContent=error.name==='AbortError'?'Timed out. Refresh to retry.':'Rankings unavailable. Refresh to retry.';
+      const retry=el('div','rankings-empty');retry.append(el('h3','','Board needs a moment'),el('p','','Refresh to retry.'));results.replaceChildren(retry);
     }finally{
       clearTimeout(timeout);if(request===sequence){panel.setAttribute('aria-busy','false');refresh.disabled=false;}
     }

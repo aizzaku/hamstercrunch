@@ -9,6 +9,10 @@ const BOARDS=['genesis','speed','cooks','sells','fortune','collection','special'
 function createBakeryService({filename=':memory:',chain,now=()=>new Date().toISOString()}={}){
   const db=new DatabaseSync(filename);
   db.exec('CREATE TABLE IF NOT EXISTS players (id TEXT PRIMARY KEY, profile TEXT, meta TEXT NOT NULL)');
+  db.exec('CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, player_id TEXT NOT NULL, expires_at INTEGER NOT NULL, revoked INTEGER NOT NULL DEFAULT 0)');
+  // Existing browser cookies remain valid. Revoked tokens stay recorded so a
+  // later process restart cannot accidentally reactivate them during migration.
+  db.prepare('INSERT OR IGNORE INTO sessions (token,player_id,expires_at) SELECT id,id,? FROM players').run(Date.parse(now())+31536000000);
   const get=db.prepare('SELECT profile,meta FROM players WHERE id=?');
   const put=db.prepare('UPDATE players SET profile=?,meta=? WHERE id=?');
   const all=db.prepare('SELECT id,profile,meta FROM players WHERE profile IS NOT NULL');
@@ -25,9 +29,14 @@ function createBakeryService({filename=':memory:',chain,now=()=>new Date().toISO
     return Number.isFinite(elapsed)&&elapsed>=previous+.25&&Number.isFinite(start)&&elapsed<=(timestamp()-start)/1000+2;
   }
   function session(id){
-    if(typeof id==='string'&&/^[a-f0-9]{64}$/.test(id)&&get.get(id))return id;
+    if(resolveSession(id))return id;
     const token=randomBytes(32).toString('hex');
-    db.prepare('INSERT INTO players VALUES (?,NULL,?)').run(token,JSON.stringify({initialized:false,bakeryPoints:0,sales:0,specialClaims:[],specialRun:null}));return token;
+    db.prepare('INSERT INTO players VALUES (?,NULL,?)').run(token,JSON.stringify({initialized:false,bakeryPoints:0,sales:0,specialClaims:[],specialRun:null}));
+    db.prepare('INSERT INTO sessions (token,player_id,expires_at) VALUES (?,?,?)').run(token,token,timestamp()+31536000000);return token;
+  }
+  function resolveSession(token){
+    if(typeof token!=='string'||!/^[a-f0-9]{64}$/.test(token))return null;
+    return db.prepare('SELECT player_id FROM sessions WHERE token=? AND revoked=0 AND expires_at>?').get(token,timestamp())?.player_id||null;
   }
   function mutate(id,fn){
     db.exec('BEGIN IMMEDIATE');
@@ -160,6 +169,6 @@ function createBakeryService({filename=':memory:',chain,now=()=>new Date().toISO
     });
     return {board,rows:entries.slice(0,50),viewer:entries.find(entry=>entry.isYou)||null,seed,version:CAMPAIGN_VERSION,total:entries.length};
   }
-  return {session,profile,command,sell,leaderboard,close:()=>db.close()};
+  return {session,resolveSession,profile,command,sell,leaderboard,db,close:()=>db.close()};
 }
 module.exports={createBakeryService};

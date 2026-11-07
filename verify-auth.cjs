@@ -1,0 +1,61 @@
+const assert=require('node:assert/strict');
+const {Wallet}=require('ethers');
+const {SiweMessage}=require('siwe');
+const {createBakeryService}=require('./bakery-service.cjs');
+const {createWalletAuth}=require('./wallet-auth.cjs');
+const {mkdtempSync}=require('node:fs');
+const {tmpdir}=require('node:os');
+const path=require('node:path');
+let count=0;
+function check(name,test){assert.ok(test,name);console.log('PASS '+name);count++;}
+async function rejected(fn){try{await fn();return false;}catch(error){return error instanceof Error;}}
+async function main(){
+  let clock=Date.parse('2026-11-07T12:00:00Z');
+  const filename=path.join(mkdtempSync(path.join(tmpdir(),'hamster-auth-')),'bakery.sqlite');
+  let service=createBakeryService({filename,now:()=>new Date(clock).toISOString()});
+  let auth=createWalletAuth({service,now:()=>clock});
+  const wallet=Wallet.createRandom(),other=Wallet.createRandom(),origin='https://hamster.example';
+  let token=service.session();const player=service.resolveSession(token);
+  await service.command(player,'rename',['Pip']);await service.command(player,'bake',['butter-paws']);
+  check('Guest remains playable without a wallet',auth.state(token).connected===false&&service.profile(player).profile.totalBaked===2);
+  async function signed(session,account=wallet){const challenge=auth.issue(session,{address:account.address,chainId:1},origin);return {message:challenge.message,signature:await account.signMessage(challenge.message)};}
+  const challenge=await signed(token);
+  const linked=await auth.verify(token,challenge,origin);token=linked.sessionToken;
+  check('First signature binds the existing guest save',linked.connected&&linked.profile.name==='Pip'&&linked.profile.totalBaked===2&&auth.state(token).address===wallet.address.toLowerCase());
+  check('Login rotates credentials without exposing canonical player ID',token!==player&&service.resolveSession(token)===player&&!service.resolveSession(player));
+  check('Signed nonce cannot replay after rotation',await rejected(()=>auth.verify(player,challenge,origin)));
+  check('Linked saves cannot re-import legacy totals',!(await service.command(player,'import',[{version:1}])).result.ok);
+  let bad=await signed(token);
+  check('Another site cannot use a valid signature',await rejected(()=>auth.verify(token,bad,'https://evil.example')));
+  check('Failed verification consumes its nonce',await rejected(()=>auth.verify(token,bad,origin)));
+  bad=await signed(token);bad.signature=await other.signMessage(bad.message);
+  check('Different signer cannot authenticate requested wallet',await rejected(()=>auth.verify(token,bad,origin)));
+  bad=await signed(token);const changed=new SiweMessage(bad.message);changed.chainId=11155111;
+  const changedText=changed.prepareMessage();
+  check('Modified network or other SIWE fields are rejected',await rejected(async()=>auth.verify(token,{message:changedText,signature:await wallet.signMessage(changedText)},origin)));
+  bad=await signed(token);clock+=300001;
+  check('Expired challenges cannot authenticate',await rejected(()=>auth.verify(token,bad,origin)));
+  const guest=service.session();const guestPlayer=service.resolveSession(guest);
+  await service.command(guestPlayer,'rename',['Hazel']);
+  const restore=await auth.verify(guest,await signed(guest),origin);
+  check('Existing wallet requires explicit restore instead of silent merge',restore.restoreRequired&&restore.savedName==='Pip'&&service.resolveSession(guest)===guestPlayer&&service.profile(guestPlayer).profile.name==='Hazel');
+  const unrelated=service.session();
+  check('Restore token is bound to its originating browser session',await rejected(()=>auth.restore(unrelated,{token:restore.restoreToken})));
+  const opened=auth.restore(guest,{token:restore.restoreToken});
+  const recovered=opened.sessionToken;
+  check('Confirmed restore opens saved bakery across browsers',opened.profile.name==='Pip'&&opened.profile.totalBaked===2&&service.resolveSession(recovered)===player);
+  check('Restoring leaves the discarded guest save intact',service.profile(guestPlayer).profile.name==='Hazel');
+  check('Restore tokens cannot replay',await rejected(()=>auth.restore(recovered,{token:restore.restoreToken})));
+  check('A linked profile cannot silently replace its wallet',await rejected(async()=>{const input=await signed(recovered,other);return auth.verify(recovered,input,origin);}));
+  const logout=auth.logout(recovered);
+  check('Sign-out creates a new guest and retains the saved wallet bakery',!logout.connected&&logout.profile.name==='Little Baker'&&!service.resolveSession(recovered)&&service.profile(player).profile.name==='Pip');
+  check('Another signed-in device retains its own session',service.resolveSession(token)===player);
+  check('Sign-out guest cannot silently import stale local totals',!service.profile(service.resolveSession(logout.sessionToken)).needsImport);
+  const limited=service.session();for(let i=0;i<6;i++)auth.issue(limited,{address:wallet.address,chainId:1},origin);
+  check('Nonce requests have a bounded per-session rate',await rejected(()=>auth.issue(limited,{address:wallet.address,chainId:1},origin)));
+  service.close();service=createBakeryService({filename,now:()=>new Date(clock).toISOString()});auth=createWalletAuth({service,now:()=>clock});
+  check('Wallet identity and saves survive database reopen',auth.state(token).connected&&service.profile(service.resolveSession(token)).profile.totalBaked===2);
+  check('Restart does not resurrect a revoked legacy cookie',!service.resolveSession(player)&&!service.resolveSession(recovered));
+  service.close();console.log(`${count} wallet authentication checks passed.`);
+}
+main().catch(error=>{console.error(error);process.exitCode=1;});

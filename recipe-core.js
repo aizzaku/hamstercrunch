@@ -36,7 +36,7 @@ function createRecipeBox(storage,random=Math.random,now=()=>new Date().toISOStri
     try{
       const raw=storage.getItem(key);if(!raw)return fresh();
       const loaded=JSON.parse(raw);
-      if(!loaded||loaded.version!==1){readOnly=true;warning='This save has an unsupported format. It has been preserved.';return fresh();}
+      if(!loaded||loaded.version!==1){readOnly=true;warning='Unsupported save. Original preserved.';return fresh();}
       const clean=fresh();
       clean.name=typeof loaded.name==='string'?loaded.name.slice(0,24):clean.name;
       clean.created=typeof loaded.created==='string'?loaded.created:clean.created;
@@ -50,13 +50,13 @@ function createRecipeBox(storage,random=Math.random,now=()=>new Date().toISOStri
       clean.orderCounter=Math.max(clean.orderCounter,...clean.orders.map(o=>o.id));
       clean.history=Array.isArray(loaded.history)?loaded.history.filter(h=>h&&typeof h.message==='string'&&typeof h.at==='string').slice(0,24):[];
       return clean;
-    }catch(error){readOnly=true;warning='The saved Recipe Box could not be read. It has been preserved.';console.warn('Recipe save could not be read:',error);return fresh();}
+    }catch(error){readOnly=true;warning='Save unreadable. Original preserved.';console.warn('Recipe save could not be read:',error);return fresh();}
   }
   let data=load();
   function save(){
     if(readOnly)return false;
     try{storage.setItem(key,JSON.stringify(data));warning='';return true;}
-    catch(error){warning='Storage unavailable. Progress is kept for this visit only.';console.warn('Recipe progress could not be saved:',error);return false;}
+    catch(error){warning='Storage unavailable. Saved for this visit only.';console.warn('Recipe progress could not be saved:',error);return false;}
   }
   function log(message){data.history.unshift({message,at:now()});data.history=data.history.slice(0,24);}
   function pick(items){return items[Math.min(items.length-1,Math.max(0,Math.floor(random()*items.length)))];}
@@ -85,8 +85,8 @@ function createRecipeBox(storage,random=Math.random,now=()=>new Date().toISOStri
     const scrapRoll=random();
     if(scrapRoll<.05||data.scrapDry>=7){
       const missing=recipes.filter(r=>(data.recipes[r.id]?.scraps||0)<2);
-      if(missing.length){const recipe=pick(missing);const entry=data.recipes[recipe.id]??={scraps:0,discovered:null,firstBaked:null,batches:0};entry.scraps++;if(entry.scraps===2){entry.discovered=now();data.xp+=15;rewards.push(`Recipe discovered: ${recipe.name}`);}else rewards.push(`Recipe scrap: ${recipe.name} (1/2)`);}
-      else{data.stamps+=2;rewards.push('+2 stamps · recipe collection complete');}
+      if(missing.length){const recipe=pick(missing);const entry=data.recipes[recipe.id]??={scraps:0,discovered:null,firstBaked:null,batches:0};entry.scraps++;if(entry.scraps===2){entry.discovered=now();data.xp+=15;rewards.push(`Discovered: ${recipe.name}`);}else rewards.push(`Scrap: ${recipe.name} (1/2)`);}
+      else{data.stamps+=2;rewards.push('+2 stamps · all recipes found');}
       data.scrapDry=0;
     }else data.scrapDry++;
     data.activeRun.loot.push(...rewards);log(`Batch ${level+1}: ${rewards.join(' · ')}`);save();return rewards;
@@ -94,8 +94,8 @@ function createRecipeBox(storage,random=Math.random,now=()=>new Date().toISOStri
   function bake(id){
     const recipe=recipes.find(r=>r.id===id);
     if(readOnly)return {ok:false,message:warning};
-    if(!recipe||data.recipes[id]?.scraps!==2)return {ok:false,message:'Discover both recipe scraps first.'};
-    if(Object.entries(recipe.needs).some(([key,n])=>data.pantry[key]<n))return {ok:false,message:'You need a few more ingredients.'};
+    if(!recipe||data.recipes[id]?.scraps!==2)return {ok:false,message:'Find 2 recipe scraps first.'};
+    if(Object.entries(recipe.needs).some(([key,n])=>data.pantry[key]<n))return {ok:false,message:'Need ingredients.'};
     for(const [key,n]of Object.entries(recipe.needs))data.pantry[key]-=n;
     const entry=data.recipes[id];entry.batches++;data.food[id]+=recipe.yield;data.totalBaked+=recipe.yield;data.xp+=10;
     if(!entry.firstBaked){entry.firstBaked=now();data.stamps+=3;}
@@ -103,8 +103,8 @@ function createRecipeBox(storage,random=Math.random,now=()=>new Date().toISOStri
   }
   function fulfill(id){
     if(readOnly)return {ok:false,message:warning};
-    const index=data.orders.findIndex(o=>o.id===id);if(index<0)return {ok:false,message:'That order has already been served.'};
-    const order=data.orders[index];if(data.food[order.recipe]<order.quantity)return {ok:false,message:'Bake enough treats for this order first.'};
+    const index=data.orders.findIndex(o=>o.id===id);if(index<0)return {ok:false,message:'Order already served.'};
+    const order=data.orders[index];if(data.food[order.recipe]<order.quantity)return {ok:false,message:'Need more treats.'};
     data.food[order.recipe]-=order.quantity;const stamps=order.quantity*3;data.stamps+=stamps;data.xp+=15;data.ordersDone++;
     const recipe=recipes.find(r=>r.id===order.recipe);data.orders.splice(index,1);fillOrders();
     const message=`Served ${order.customer}: +${stamps} stamps`;log(message);save();return {ok:true,message,recipe:recipe.name};
@@ -113,8 +113,8 @@ function createRecipeBox(storage,random=Math.random,now=()=>new Date().toISOStri
   // Stamps buy targeted ingredients: a deterministic escape from unlucky drops.
   function buyIngredient(id){
     if(readOnly)return {ok:false,message:warning};
-    if(!ingredients.some(i=>i.id===id)||data.stamps<3)return {ok:false,message:'You need 3 stamps for an ingredient.'};
-    data.stamps-=3;data.pantry[id]++;log(`Pantry restock: +1 ${ingredients.find(i=>i.id===id).name}`);save();return {ok:true,message:'One ingredient added to your pantry.'};
+    if(!ingredients.some(i=>i.id===id)||data.stamps<3)return {ok:false,message:'Need 3 stamps.'};
+    data.stamps-=3;data.pantry[id]++;log(`Restock: +1 ${ingredients.find(i=>i.id===id).name}`);save();return {ok:true,message:'+1 ingredient.'};
   }
   return {snapshot,startRun,awardLevel,bake,fulfill,rename,buyIngredient};
 }

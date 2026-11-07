@@ -20,3 +20,8 @@ const RADIO_TRACKS = [
 ```
 
 The radio starts only after the player clicks Play. It supports previous/next, automatic advancement and remembered volume. Game effects have their own separate sound toggle. Without configured tracks, playback controls are disabled and the player displays an honest empty state.
+
+
+### Burrow Radio tracks
+
+Ten user-provided ElevenLabs tracks are served from `assets/music`: Burrow Comfort, Pantry Adventure, Tiny Paws Kitchen Dance, Snack Heist Shuffle, Snack Cupboard Shuffle, Moonlit Hamster Garden, Hamster Tea Rush, Biscuits on the Little Line, Snack Bowl Groove and Homeward Burrow. Each original is approximately 120 seconds. Files were copied without transcoding; the source folder stays unchanged. Controls support selection, shuffle, listening history and saved volume. Playback requires a user action.

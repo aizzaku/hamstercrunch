@@ -1,6 +1,6 @@
 # Railway launch
 
-The repository must contain the game source, assets, Dockerfile and server files. Never upload `.local/`, `.env` files or session databases. This project has no npm dependencies or build step. Docker pins the runtime to Node 24 and runs `node server.cjs`.
+The repository must contain the game source, assets, Dockerfile and server files. Never upload `.local/`, `.env` files or session databases. Docker pins Node 24, installs runtime libraries using `npm ci --omit=dev` and starts `node server.cjs`. The wallet connector browser bundle is checked in; regenerate it with `npm run build:wallet` when its source changes.
 
 1. Publish the prepared source to https://github.com/aizzaku/hamstercrunch. Keep the repository public for Squeekchain Direct submission. Confirm existing repository content before merging or pushing; do not force push.
 2. In Railway, choose New Project, then Deploy from GitHub repo. Connect GitHub if needed and select `aizzaku/hamstercrunch`. Railway should detect the Dockerfile.
@@ -24,3 +24,10 @@ Suggested description:
 > Hamster Crunch: Genesis Block is a cozy hamster brick-breaker with 21 levels across three bakery chapters. Players collect ingredients, discover 12 recipes and bake treats. The bakery market opens only while fresh hardware telemetry reports Squeektoshi running. Confirmed settlement data seeds market prices and a shared Special Batch challenge. Seven shared leaderboards track arcade and bakery progress. Points only; no token or transaction required. Arcade rankings use basic validation and remain beta records.
 
 Keep the required Squeekchain verification records in place after approval. Do not invent verification values; obtain them from the actual submission flow.
+
+
+## Wallet configuration
+
+The public project ID and current Railway origin are configured in `site-config.json`. Optional Railway variables `PUBLIC_ORIGIN` and `WALLETCONNECT_PROJECT_ID` override them. For the current build, use `PUBLIC_ORIGIN=https://hamstercrunch-production.up.railway.app` if setting it explicitly. Add that hostname to your Reown project's allowed origins if origin restrictions are enabled. For local QR testing, also allow `http://127.0.0.1:4173` as needed. Changing to your own domain requires updating the origin and the Reown allowlist before wallet login works there. No private wallet keys or seed phrases are used by the server.
+
+The update adds persistent session and wallet tables when the service starts. Existing browser cookies migrate without losing their profile; back up the Railway data volume before rollout. Include package-lock.json, site-config.json, walletconnect-provider.js and all ten files under assets/music in the source push. The original /music folder is intentionally ignored.

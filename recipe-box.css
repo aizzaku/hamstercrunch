@@ -7,3 +7,4 @@
 .market-banner h3{font-size:30px;margin:8px 0 12px}.market-banner strong{display:inline-block;background:#fff9eb;padding:8px 14px;border-radius:30px;color:#a45d4e}
 .market-open{background:#e9edcf;border-color:#a4b57a}.market-unknown{background:#f1e5dc}
 .special-batch{background:#fff8e8;border:2px dashed #d4ac75;border-radius:18px;padding:22px;margin:18px 0 24px;display:grid;gap:12px}.special-batch h3,.special-batch p{margin:0}.special-batch button{justify-self:start}
+.collection-grid .recipe-card{min-height:200px}.market-banner{padding:16px}.market-banner .recipe-description{min-height:0;margin:12px 0 0}.market-info{font-size:11px;color:#986d50;margin:8px 0 16px}.market-info summary{cursor:pointer}.market-info .recipe-save{overflow-wrap:anywhere;margin-bottom:8px}.special-batch small{font-size:11px;color:#986d50}

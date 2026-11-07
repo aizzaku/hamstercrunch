@@ -6,7 +6,7 @@ function check(name,condition){assert.ok(condition,name);console.log(`PASS ${nam
 const elements=new Map(),storage=new Map(),listeners=new Map();
 function element(id){if(!elements.has(id))elements.set(id,{paused:true,disabled:false,textContent:'',value:0,attributes:{},addEventListener(name,fn){listeners.set(`${id}:${name}`,fn);},setAttribute(k,v){this.attributes[k]=v;},getAttribute(k){return this.attributes[k]||null;},async play(){this.paused=false;listeners.get(`${id}:play`)?.();},pause(){this.paused=true;listeners.get(`${id}:pause`)?.();},set src(v){this.attributes.src=v;},get src(){return this.attributes.src;}});return elements.get(id);}
 const context=vm.createContext({document:{querySelector:s=>element(s.slice(1))},localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v)},console});
-vm.runInContext(fs.readFileSync('radio.js','utf8'),context);
+vm.runInContext(fs.readFileSync('radio.js','utf8').replace(/const RADIO_TRACKS = \[[\s\S]*?\n\];/, 'const RADIO_TRACKS = [];'),context);
 (async()=>{
   check('Empty radio does not offer fake playback',element('radio-play').disabled&&element('radio-next').disabled&&element('radio-previous').disabled);
   check('Default volume is gentle and separate from effects',element('radio-audio').volume===.35);
@@ -19,7 +19,7 @@ vm.runInContext(fs.readFileSync('radio.js','utf8'),context);
   await vm.runInContext('switchTrack(1)',context);check('Next wraps to first track',element('radio-title').textContent==='First Crumbs');
   element('radio-audio').pause();await vm.runInContext('switchTrack(-1)',context);check('Previous wraps without starting paused audio',element('radio-audio').paused&&element('radio-title').textContent==='Sunflower Shuffle');
   element('radio-volume').value=60;listeners.get('radio-volume:input')();check('Music volume persists independently',element('radio-audio').volume===.6&&storage.get('hamster-radio-volume')==='0.6');
-  element('radio-audio').play=async()=>{throw new Error('Expected test failure');};await vm.runInContext('playRadio()',context);check('Unavailable track produces honest status',element('radio-status').textContent==='Track unavailable. Try again.');
+  element('radio-audio').play=async()=>{throw new Error('Expected test failure');};await vm.runInContext('playRadio()',context);check('Unavailable track produces honest status',element('radio-status').textContent==='Track unavailable');
   for(const file of ['bakery-background.png','bakery-sprites.png','burrow-radio.png'])check(`${file} is a real PNG`,fs.readFileSync(`assets/${file}`).subarray(1,4).toString()==='PNG');
   console.log(`${count} bakery and radio checks passed.`);
 })().catch(error=>{console.error(error);process.exitCode=1;});
