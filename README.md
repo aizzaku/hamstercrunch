@@ -1,5 +1,7 @@
 # Hamster Crunch: Genesis Block
 
+squeekchain-project: 0f3f56a4-98d8-4946-8e75-5b7686e88eda
+
 ## Recipe Box: collection and baking
 
 Open **Recipe Box** in the header for Recipes, Pantry, Orders, Collection and Profile. The starter pantry and Butter Paw recipe let you bake immediately. There are 12 recipes and 8 ingredients. Baking consumes exact ingredient quantities and produces treats; serving orders consumes treats and earns stamps and baker XP. Your first bake permanently collects the food card. Stamps can restock a chosen ingredient (3 stamps each). Cosmetic baker titles unlock at 3, 10 and 25 served orders; they do not change campaign power.
