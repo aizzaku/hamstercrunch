@@ -28,6 +28,11 @@ Keep the required Squeekchain verification records in place after approval. Do n
 
 ## Wallet configuration
 
-The public project ID and current Railway origin are configured in `site-config.json`. Optional Railway variables `PUBLIC_ORIGIN` and `WALLETCONNECT_PROJECT_ID` override them. For the current build, use `PUBLIC_ORIGIN=https://hamstercrunch-production.up.railway.app` if setting it explicitly. Add that hostname to your Reown project's allowed origins if origin restrictions are enabled. For local QR testing, also allow `http://127.0.0.1:4173` as needed. Changing to your own domain requires updating the origin and the Reown allowlist before wallet login works there. No private wallet keys or seed phrases are used by the server.
+The public project ID and custom-domain origin are configured in `site-config.json`. Optional Railway variables `PUBLIC_ORIGIN` and `WALLETCONNECT_PROJECT_ID` override them. For the current build, use `PUBLIC_ORIGIN=https://hamstercrunch.fun` if setting it explicitly. Add `https://hamstercrunch.fun` to your Reown project's allowed origins if origin restrictions are enabled. For local QR testing, also allow `http://127.0.0.1:4173` as needed. Changing to your own domain requires updating the origin and the Reown allowlist before wallet login works there. No private wallet keys or seed phrases are used by the server.
 
 The update adds persistent session and wallet tables when the service starts. Existing browser cookies migrate without losing their profile; back up the Railway data volume before rollout. Include package-lock.json, site-config.json, walletconnect-provider.js and all ten files under assets/music in the source push. The original /music folder is intentionally ignored.
+
+
+## Offline live-order worker
+
+The Node process now runs a 30-second pending-order worker. It makes no chain requests when there are no reservations. Queues, reserved inventory, receipts and totals live in the existing SQLite profile metadata, so the same `/data` volume must stay attached. Keep one replica. If Railway Serverless sleeping or a depleted free-tier credit stops the service, automatic orders cannot run during that time; use an always-running service for reliable offline selling. Verify pending reservations and cancellation after deploying, then observe a real wheel opening before promising uninterrupted fulfillment.

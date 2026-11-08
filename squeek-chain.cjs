@@ -38,7 +38,7 @@ function createBatch(settlement){
   const offers=RecipeData.recipes.map((recipe,index)=>{
     const multiplier=75+bytes[index+1]%76;
     const base=Math.max(3,Math.ceil(Object.values(recipe.needs).reduce((sum,n)=>sum+n,0)*3/recipe.yield));
-    return {recipe:recipe.id,price:Math.max(1,Math.round(base*multiplier/100)),demand:multiplier>=125?'Craving':multiplier<=90?'Quiet':'Steady'};
+    return {recipe:recipe.id,price:Math.max(1,Math.round(base*multiplier/100)),rangeMin:Math.max(1,Math.round(base*.75)),rangeMax:Math.max(1,Math.round(base*1.5)),demand:multiplier>=125?'Craving':multiplier<=90?'Quiet':'Steady'};
   });
   return {seed,special:{seed,ingredient},offers};
 }

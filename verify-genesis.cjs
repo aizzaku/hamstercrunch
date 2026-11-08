@@ -79,5 +79,14 @@ check('Campaign HUD shows all 21 levels and chapter',`loadLevel(20);ui.level.tex
   check('First tap on radio Play cannot double toggle music',`defaultAudioStarted=false;startDefaultAudio({type:'pointerdown',target:{closest:q=>q==='#radio-play'}});startCounters.effects===2&&startCounters.music===2`);
   check('Explosions keep camera motion below one logical pixel',`reset();state='playing';hitBrick(bricks.find(b=>b.explosive),balls[0]);shake>0&&shake<=.75`);
   check('Zoomies uses a tiny camera nudge',`state='playing';zoomCharge=100;activateZoomies();shake===.6`);
+  context.RecipeProfile={...context.RecipeProfile,startRun:()=>101};
+  check('Hamsters gain 30 percent speed after ten active seconds',`reset();action();for(let i=0;i<2400;i++){balls[0].x=400;balls[0].y=400;step(STEP);}Math.abs(rallySpeed()/currentLayout().speed-1.3)<.00001&&Math.abs(Math.hypot(balls[0].vx,balls[0].vy)-rallySpeed())<.00001`);
+  check('Pause freezes the speed ramp',`pause();const pausedRally=rallyTime;step(5);const speedFrozen=rallyTime===pausedRally;action();speedFrozen`);
+  check('Multiball inherits the accelerated speed',`applyPower('multi');balls.every(b=>Math.abs(Math.hypot(b.vx,b.vy)-rallySpeed())<.00001)`);
+  check('Losing a buddy keeps the rally speed',`const previousRally=rallyTime;balls[0].y=H+30;step(STEP);balls.length===2&&lives===3&&rallyTime>previousRally`);
+  check('Paddle bounces retain accelerated speed',`balls=[newBall(paddle.x+paddle.w/2,paddle.y-13,0,rallySpeed())];step(.01);balls[0].vy<0&&Math.abs(Math.hypot(balls[0].vx,balls[0].vy)-rallySpeed())<.00001`);
+  check('Speed caps at 175 percent after 25 active seconds',`for(let i=0;i<4800;i++){balls[0].x=400;balls[0].y=400;step(STEP);}rallyTime===25&&Math.abs(Math.hypot(balls[0].vx,balls[0].vy)-currentLayout().speed*1.75)<.00001`);
+  check('Life loss resets speed and waiting does not accelerate',`balls[0].y=H+30;step(STEP);step(5);state==='ready'&&lives===2&&rallyTime===0&&Math.abs(Math.hypot(balls[0].vx,balls[0].vy)-currentLayout().speed)<.00001`);
+  check('A new level starts at its own base speed',`action();step(.01);loadLevel(10);rallyTime===0&&Math.abs(Math.hypot(balls[0].vx,balls[0].vy)-LEVELS[10].speed)<.00001`);
   console.log(`${count} Genesis gameplay checks passed.`);
 })().catch(error=>{console.error(error);process.exitCode=1;});

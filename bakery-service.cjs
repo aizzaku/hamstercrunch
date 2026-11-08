@@ -17,12 +17,28 @@ function createBakeryService({filename=':memory:',chain,now=()=>new Date().toISO
   const put=db.prepare('UPDATE players SET profile=?,meta=? WHERE id=?');
   const all=db.prepare('SELECT id,profile,meta FROM players WHERE profile IS NOT NULL');
   const timestamp=()=>Date.parse(now());
+  function walletFor(id){
+    if(!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='wallet_accounts'").get())return null;
+    return db.prepare('SELECT address FROM wallet_accounts WHERE player_id=?').get(id)?.address||null;
+  }
+  function runAllowance(id,meta){
+    const day=new Date(timestamp()).toISOString().slice(0,10),walletRequired=!walletFor(id);
+    const used=meta.rewardedRuns?.day===day?meta.rewardedRuns.used:0;
+    const resetsAt=new Date(Date.parse(`${day}T00:00:00Z`)+86400000).toISOString();
+    return {walletRequired,limit:5,used,remaining:walletRequired?0:Math.max(0,5-used),resetsAt};
+  }
+  function reserveRewardedRun(id,meta){
+    const allowance=runAllowance(id,meta),rewarded=!allowance.walletRequired&&allowance.remaining>0;
+    if(rewarded)meta.rewardedRuns={day:new Date(timestamp()).toISOString().slice(0,10),used:allowance.used+1};
+    meta.activeRunRewarded=rewarded;return rewarded;
+  }
   function prepareMeta(meta){
     meta.rankedCooks??=0;meta.rankedRecipes??=[];
     // Points have not been spendable in earlier builds, so their saved balance
     // is also lifetime earnings. Unlike imported recipe totals, sales are server-owned.
     meta.pointsEarned??=meta.bakeryPoints||0;
     meta.specialTimes??={};
+    meta.liveOrders??=[];meta.saleReceipts??=[];meta.lastSales??={};
     return meta;
   }
   function validTime(elapsed,start,previous=0){
@@ -48,33 +64,42 @@ function createBakeryService({filename=':memory:',chain,now=()=>new Date().toISO
       const context={meta,model,replace(value){raw=JSON.stringify(value);model=createRecipeBox(storage,Math.random,now);this.model=model;},raw:()=>JSON.parse(raw)};
       const result=fn(context);
       put.run(raw,JSON.stringify(meta),id);db.exec('COMMIT');
-      return {profile:{...context.model.snapshot(),bakeryPoints:meta.bakeryPoints,sales:meta.sales,specialClaims:[...meta.specialClaims]},needsImport:!meta.initialized,result};
+      return {profile:{...context.model.snapshot(),bakeryPoints:meta.bakeryPoints,sales:meta.sales,specialClaims:[...meta.specialClaims],liveOrders:meta.liveOrders.map(order=>({...order})),saleReceipts:meta.saleReceipts.map(receipt=>({...receipt})),lastSales:{...meta.lastSales},saleTotals:{quantity:meta.sales,points:meta.pointsEarned},runAllowance:runAllowance(id,meta),activeRunRewarded:meta.activeRunRewarded===true},needsImport:!meta.initialized,result};
     }catch(error){db.exec('ROLLBACK');throw error;}
   }
   function profile(id){return mutate(id,()=>undefined);}
+  function liveOrders(id){const saved=profile(id);return {...saved,orders:saved.profile.liveOrders,receipts:saved.profile.saleReceipts,totalSold:saved.profile.saleTotals.quantity,totalPoints:saved.profile.saleTotals.points};}
+  function recordSale(context,data,{recipe,quantity,price,seed,orderId=null}){
+    const points=price*quantity;
+    const receipt={id:randomBytes(12).toString('hex'),orderId,kind:orderId?'queued':'manual',recipe,quantity,unitPrice:price,totalPoints:points,seed,at:now()};
+    context.meta.bakeryPoints+=points;context.meta.pointsEarned+=points;context.meta.sales+=quantity;context.meta.initialized=true;
+    context.meta.saleReceipts.unshift(receipt);context.meta.saleReceipts=context.meta.saleReceipts.slice(0,30);context.meta.lastSales[recipe]=receipt;
+    data.history.unshift({at:receipt.at,message:`Sold ${quantity} ${RecipeData.recipes.find(r=>r.id===recipe).name}: +${points} Bakery Points`});data.history=data.history.slice(0,24);
+    return receipt;
+  }
   const failure=message=>({ok:false,message});
   async function command(id,action,args=[]){
     if(!Array.isArray(args))throw new Error('Command arguments must be an array.');
-    const bakery=action==='startSpecial'?await chain.snapshot():null;
+    const bakery=['startSpecial','queueSale'].includes(action)?await chain.snapshot({force:action==='queueSale'}):null;
     return mutate(id,context=>{
       const {meta}=context;
       if(action==='import'){
         if(meta.initialized)return failure('This bakery already has a saved profile.');
         const imported=args[0];
         if(!imported||imported.version!==1||JSON.stringify(imported).length>64000)return failure('The previous save could not be imported. It remains on this browser.');
-        context.replace(imported);
-        if(context.model.snapshot().readOnly)throw new Error('Unsupported recipe save.');
-        meta.initialized=true;return {ok:true,message:'Your browser collection has moved into this bakery.'};
+        if(typeof imported.name==='string')context.model.rename(imported.name);
+        meta.initialized=true;return {ok:true,message:'Legacy save kept on this browser. New bakery starts with server-issued supplies.'};
       }
       if(action==='startRun'){
         meta.initialized=true;
         const runId=context.model.startRun();
-        meta.campaignRun={id:runId,version:CAMPAIGN_VERSION,startedAt:timestamp(),reached:0,time:0};
+        meta.campaignRun={id:runId,version:CAMPAIGN_VERSION,startedAt:timestamp(),reached:0,time:0,rewarded:reserveRewardedRun(id,meta)};
         return runId;
       }
       if(action==='awardLevel'){
         const [runId,level,elapsed]=args,run=meta.campaignRun;
         if(!run||run.id!==runId||run.version!==CAMPAIGN_VERSION||!Number.isInteger(level)||level!==run.reached||level<0||level>=LEVELS.length||!validTime(elapsed,run.startedAt,run.time))return [];
+        if(run.rewarded!==true){run.reached++;run.time=Math.round(elapsed*1000)/1000;return [];}
         const rewards=context.model.awardLevel(runId,level);
         if(!rewards.length)return [];
         run.reached++;run.time=Math.round(elapsed*1000)/1000;
@@ -86,24 +111,45 @@ function createBakeryService({filename=':memory:',chain,now=()=>new Date().toISO
       if(action==='bake'){
         meta.initialized=true;
         const result=context.model.bake(...args);
-        if(result.ok){
+        if(result.ok&&walletFor(id)){
           const recipe=RecipeData.recipes.find(item=>item.id===args[0]);
           meta.rankedCooks+=recipe.yield;
           if(!meta.rankedRecipes.includes(recipe.id))meta.rankedRecipes.push(recipe.id);
         }
         return result;
       }
+      if(action==='queueSale'){
+        if(!walletFor(id))return failure('Connect a wallet to sell treats for Bakery Points.');
+        const [recipe,quantity]=args,data=context.raw();
+        if(!RecipeData.recipes.some(item=>item.id===recipe)||!Number.isSafeInteger(quantity)||quantity<1||quantity>1000)return failure('Choose a valid treat and quantity.');
+        if(meta.liveOrders.length>=24)return failure('Your live order tray is full.');
+        if(data.food[recipe]<quantity)return failure('Bake enough treats first.');
+        const queuedWhileOpen=bakery?.status==='open';
+        const order={id:randomBytes(12).toString('hex'),recipe,quantity,createdAt:now(),waitForRest:queuedWhileOpen,blockedSeed:queuedWhileOpen?bakery.seed:null};
+        data.food[recipe]-=quantity;meta.liveOrders.push(order);meta.initialized=true;
+        data.history.unshift({at:now(),message:`Queued ${quantity} ${RecipeData.recipes.find(r=>r.id===recipe).name} for live sale`});data.history=data.history.slice(0,24);context.replace(data);
+        return {ok:true,orderId:order.id,message:`Reserved ×${quantity}. Sells at the next verified opening.`};
+      }
+      if(action==='cancelSale'){
+        const index=meta.liveOrders.findIndex(order=>order.id===args[0]);
+        if(index<0)return failure('That live order has already sold or been canceled.');
+        const [order]=meta.liveOrders.splice(index,1),data=context.raw();
+        data.food[order.recipe]+=order.quantity;
+        data.history.unshift({at:now(),message:`Live order canceled: ×${order.quantity} returned to your tin`});data.history=data.history.slice(0,24);context.replace(data);
+        return {ok:true,message:`Canceled. ×${order.quantity} returned to your tin.`};
+      }
       const methods=['fulfill','rename','buyIngredient'];
       if(methods.includes(action)){meta.initialized=true;return context.model[action](...args);}
       if(action==='startSpecial'){
         if(!bakery?.special||args[0]!==bakery.special.seed)return failure('The Special Batch has changed. Refresh the bakery.');
-        meta.initialized=true;meta.specialRun={id:randomBytes(16).toString('hex'),seed:args[0],ingredient:bakery.special.ingredient,startedAt:timestamp()};
-        return {ok:true,runId:meta.specialRun.id,...bakery.special};
+        meta.initialized=true;meta.specialRun={id:randomBytes(16).toString('hex'),seed:args[0],ingredient:bakery.special.ingredient,startedAt:timestamp(),rewarded:reserveRewardedRun(id,meta)};
+        return {ok:true,runId:meta.specialRun.id,...bakery.special,rewarded:meta.specialRun.rewarded};
       }
       if(action==='awardSpecial'){
         const run=meta.specialRun;
         if(!run||run.id!==args[0])return failure('That Special Batch run has already been recorded or was not started.');
         if(!validTime(args[1],run.startedAt))return failure('That clear time could not be validated. Complete a new Special Batch run.');
+        if(run.rewarded!==true){meta.specialRun=null;return {ok:true,rewards:[],message:'Practice complete. No rewards or ranked result.'};}
         if(!RecipeData.ingredients.some(i=>i.id===run.ingredient))return failure('The featured ingredient is unavailable.');
         const recorded=Math.round(args[1]*1000)/1000;
         const best=meta.specialTimes[run.seed];
@@ -125,6 +171,7 @@ function createBakeryService({filename=':memory:',chain,now=()=>new Date().toISO
   async function sell(id,{recipe,quantity,seed}={}){
     const bakery=await chain.snapshot({force:true});
     const output=mutate(id,context=>{
+      if(!walletFor(id))return failure('Connect a wallet to sell treats for Bakery Points.');
       if(bakery.status!=='open')return failure(bakery.status==='closed'?'The bakery is resting. Come back when Squeektoshi runs.':'Live wheel data is unavailable. Sales are paused.');
       if(seed!==bakery.seed)return failure('The market batch changed. Check the new prices.');
       const offer=bakery.offers.find(o=>o.recipe===recipe);
@@ -133,10 +180,36 @@ function createBakeryService({filename=':memory:',chain,now=()=>new Date().toISO
       if(data.food[recipe]<quantity)return failure('There are not enough treats in your tin.');
       const points=offer.price*quantity;
       if(!Number.isSafeInteger(points)||points<1)return failure('That price is unavailable.');
-      data.food[recipe]-=quantity;context.meta.bakeryPoints+=points;context.meta.pointsEarned+=points;context.meta.sales+=quantity;context.meta.initialized=true;
-      data.history.unshift({at:now(),message:`Sold ${quantity} ${RecipeData.recipes.find(r=>r.id===recipe).name}: +${points} Bakery Points`});data.history=data.history.slice(0,24);context.replace(data);
+      data.food[recipe]-=quantity;recordSale(context,data,{recipe,quantity,price:offer.price,seed});context.replace(data);
       return {ok:true,points,message:`Sold ${quantity} treats for ${points} Bakery Points.`};
     });return {...output,bakery};
+  }
+  function hasLiveOrders(){return !!db.prepare("SELECT 1 FROM players WHERE profile IS NOT NULL AND json_array_length(json_extract(meta,'$.liveOrders'))>0 LIMIT 1").get();}
+  async function processLiveOrders(){
+    if(!hasLiveOrders())return {sold:0,points:0};
+    const bakery=await chain.snapshot({force:true});
+    // Never treat a connection fault as resting. Expired ACTIVE snapshots cannot sell.
+    const expires=Date.parse(bakery.expiresAt);
+    if(!['open','closed'].includes(bakery.status)||!Number.isFinite(expires)||expires<=timestamp())return {sold:0,points:0};
+    if(bakery.status==='open'&&(!bakery.seed||!Array.isArray(bakery.offers)))return {sold:0,points:0};
+    let sold=0,points=0;
+    const players=db.prepare("SELECT id FROM players WHERE profile IS NOT NULL AND json_array_length(json_extract(meta,'$.liveOrders'))>0").all();
+    for(const player of players){
+      if(expires<=timestamp())break;
+      const output=mutate(player.id,context=>{
+        if(bakery.status==='closed'){for(const order of context.meta.liveOrders)order.waitForRest=false;return {sold:0,points:0};}
+        const data=context.raw(),remaining=[];let playerSold=0,playerPoints=0;
+        for(const order of context.meta.liveOrders){
+          if(order.waitForRest){remaining.push(order);continue;}
+          const offer=bakery.offers.find(item=>item.recipe===order.recipe);
+          if(!offer||!Number.isSafeInteger(offer.price)||offer.price<1||!Number.isSafeInteger(offer.price*order.quantity)){remaining.push(order);continue;}
+          const receipt=recordSale(context,data,{recipe:order.recipe,quantity:order.quantity,price:offer.price,seed:bakery.seed,orderId:order.id});
+          playerSold+=order.quantity;playerPoints+=receipt.totalPoints;
+        }
+        context.meta.liveOrders=remaining;context.replace(data);return {sold:playerSold,points:playerPoints};
+      });sold+=output.result.sold;points+=output.result.points;
+    }
+    return {sold,points};
   }
   async function leaderboard(board='genesis',viewerId){
     if(!BOARDS.includes(board))throw new Error('Unknown leaderboard.');
@@ -169,6 +242,6 @@ function createBakeryService({filename=':memory:',chain,now=()=>new Date().toISO
     });
     return {board,rows:entries.slice(0,50),viewer:entries.find(entry=>entry.isYou)||null,seed,version:CAMPAIGN_VERSION,total:entries.length};
   }
-  return {session,resolveSession,profile,command,sell,leaderboard,db,close:()=>db.close()};
+  return {session,resolveSession,profile,liveOrders,hasLiveOrders,processLiveOrders,command,sell,leaderboard,db,close:()=>db.close()};
 }
 module.exports={createBakeryService};

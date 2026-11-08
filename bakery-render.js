@@ -44,8 +44,15 @@ function draw() {
   for(const p of particles){ctx.globalAlpha=Math.max(0,p.life/.45);ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,2,0,Math.PI*2);ctx.fill();}ctx.globalAlpha=1;
   for(const drop of drops){rounded(drop.x-15,drop.y-13,30,26,10,'#fff6e6','#ca9a72');ctx.fillStyle='#9f5962';ctx.font='bold 17px Georgia';ctx.textAlign='center';ctx.fillText(drop.power.icon,drop.x,drop.y+6);}
   if(shield){ctx.strokeStyle='#b596bd';ctx.lineWidth=3;ctx.setLineDash([8,5]);ctx.beginPath();ctx.moveTo(0,H-12);ctx.lineTo(W,H-12);ctx.stroke();ctx.setLineDash([]);}
-  if(!BakeryArt.sprite(ctx,'paddle',paddle.x-8,paddle.y-13,paddle.w+16,paddle.h+26))rounded(paddle.x,paddle.y,paddle.w,paddle.h,7,wideLeft>0?'#e3bd77':'#d8a76a','#a97741');
-  if(wideLeft>0){ctx.strokeStyle='#c47c4e';ctx.setLineDash([3,3]);ctx.strokeRect(paddle.x-4,paddle.y-8,paddle.w+8,paddle.h+16);ctx.setLineDash([]);}
+  const pinWidth=currentLayout().width,pinX=paddle.x+(paddle.w-pinWidth)/2;
+  if(wideLeft>0){
+    ctx.save();ctx.strokeStyle='#a96848';ctx.lineWidth=2;ctx.lineCap='round';ctx.setLineDash([1,5]);
+    for(const [left,right] of [[paddle.x,pinX],[pinX+pinWidth,paddle.x+paddle.w]]){
+      ctx.beginPath();ctx.moveTo(left,paddle.y+paddle.h/2);ctx.lineTo(right,paddle.y+paddle.h/2);ctx.stroke();
+    }
+    ctx.restore();
+  }
+  if(!BakeryArt.sprite(ctx,'paddle',pinX-8,paddle.y-13,pinWidth+16,paddle.h+26))rounded(pinX,paddle.y,pinWidth,paddle.h,7,'#d8a76a','#a97741');
   balls.forEach(hamster);
   if(combo>1&&comboLeft>0){ctx.textAlign='center';ctx.font='bold 22px Georgia';ctx.fillStyle='#b36457';ctx.fillText(`${combo}× Sweet crunch!`,W/2,390);}
   if(zoomLeft>0){ctx.strokeStyle='#dd8a80';ctx.lineWidth=4;ctx.strokeRect(3,3,W-6,H-6);ctx.textAlign='center';ctx.fillStyle='#b15c60';ctx.font='bold 18px Georgia';ctx.fillText('✦ Sugar-rush zoomies! ✦',W/2,420);}

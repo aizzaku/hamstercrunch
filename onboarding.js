@@ -15,7 +15,7 @@ const Onboarding=(()=>{
   skip.addEventListener('click',finish);dialog.addEventListener('cancel',event=>{event.preventDefault();finish();});
   dialog.addEventListener('close',()=>{keys.clear();if(resume&&state==='paused')action();resume=false;canvas.focus();});
   document.querySelector('#replay-tutorial').addEventListener('click',()=>{const wasPlaying=menuPaused;menuPaused=false;ui.details.close();open();resume=wasPlaying;});
-  function firstClear(){if(read(basketKey))return;remember(basketKey);document.querySelector('#bakery-nudge').hidden=false;}
+  function firstClear(){if(typeof WalletUI!=='undefined')WalletUI.firstClear();if(read(basketKey))return;remember(basketKey);document.querySelector('#bakery-nudge').hidden=false;}
   document.querySelector('#tip-bake').addEventListener('click',()=>{document.querySelector('#bakery-nudge').hidden=true;RecipeProfile.open();});
   document.querySelector('#tip-dismiss').addEventListener('click',()=>{document.querySelector('#bakery-nudge').hidden=true;});
   if(!read(key))open();

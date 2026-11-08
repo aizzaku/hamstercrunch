@@ -1,6 +1,7 @@
 const assert=require('node:assert/strict');
 const {createBakeryService}=require('./bakery-service.cjs');
 const {createRecipeBox}=require('./recipe-core.js');
+const {createWalletAuth}=require('./wallet-auth.cjs');
 const fs=require('node:fs');
 const os=require('node:os');
 const path=require('node:path');
@@ -9,14 +10,18 @@ let wall=Date.parse('2026-11-06T12:00:00Z');const now=()=>new Date(wall).toISOSt
 const service=createBakeryService({chain:{snapshot:async()=>market},now});
 let count=0;
 function check(name,value){assert.ok(value,name);console.log(`PASS ${name}`);count++;}
+// These tests exercise rewarded play; signature verification has its own auth suite.
+function linkRewardFixture(target,id){createWalletAuth({service:target});target.db.prepare('INSERT INTO wallet_accounts VALUES (?,?)').run(`0x${id.slice(0,40)}`,id);}
 (async()=>{
   const id=service.session();check('Sessions use random opaque identifiers',/^[a-f0-9]{64}$/.test(id)&&service.session(id)===id&&service.session('invalid')!==id);
   check('Fresh profile requests allow one-time import',service.profile(id).needsImport);
+  linkRewardFixture(service,id);
   const memory=new Map(),store={getItem:key=>memory.get(key),setItem:(key,value)=>memory.set(key,value)};
   const old=createRecipeBox(store);old.rename('Isaac');old.bake('butter-paws');
   let result=await service.command(id,'import',[JSON.parse([...memory.values()][0])]);
-  check('One-time migration preserves collection and food',result.result.ok&&result.profile.name==='Isaac'&&result.profile.food['butter-paws']===2&&!!result.profile.recipes['butter-paws'].firstBaked);
+  check('Legacy import keeps the name and local save without minting inventory',result.result.ok&&result.profile.name==='Isaac'&&result.profile.food['butter-paws']===0&&!result.profile.recipes['butter-paws'].firstBaked&&old.snapshot().food['butter-paws']===2);
   check('Migration cannot overwrite a used bakery',!(await service.command(id,'import',[old.snapshot()])).result.ok);
+  await service.command(id,'bake',['butter-paws']);
   result=await service.sell(id,{recipe:'butter-paws',quantity:1,seed:'seed-one'});
   check('Sales deduct food and award server-priced points',result.result.ok&&result.profile.food['butter-paws']===1&&result.profile.bakeryPoints===7);
   check('Overselling leaves inventory unchanged',!(await service.sell(id,{recipe:'butter-paws',quantity:2,seed:'seed-one'})).result.ok&&service.profile(id).profile.food['butter-paws']===1);
@@ -41,6 +46,8 @@ function check(name,value){assert.ok(value,name);console.log(`PASS ${name}`);cou
   const filename=path.join(fs.mkdtempSync(path.join(os.tmpdir(),'hamster-bakery-test-')),'profile.sqlite');
   let disk=createBakeryService({filename,chain:{snapshot:async()=>market},now});
   const diskId=disk.session();await disk.command(diskId,'import',[old.snapshot()]);
+  linkRewardFixture(disk,diskId);
+  await disk.command(diskId,'bake',['butter-paws']);
   await disk.sell(diskId,{recipe:'butter-paws',quantity:1,seed:'seed-one'});
   const diskSpecial=await disk.command(diskId,'startSpecial',['seed-one']);wall+=10000;await disk.command(diskId,'awardSpecial',[diskSpecial.result.runId,10]);
   disk.close();disk=createBakeryService({filename,chain:{snapshot:async()=>market},now});

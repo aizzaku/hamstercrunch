@@ -1,5 +1,6 @@
 const assert=require('node:assert/strict');
 const {createBakeryService}=require('./bakery-service.cjs');
+const {createWalletAuth}=require('./wallet-auth.cjs');
 const {LEVELS,CAMPAIGN_VERSION}=require('./levels.js');
 let wall=Date.parse('2026-11-06T12:00:00Z');
 let seed='shared-batch';
@@ -18,6 +19,9 @@ async function clear(id,levels,seconds){
 }
 (async()=>{
   const a=service.session(),b=service.session(),c=service.session();
+  // Verified-wallet fixtures; real SIWE binding is covered by verify-auth.cjs.
+  createWalletAuth({service});
+  for(const id of [a,b,c])service.db.prepare('INSERT INTO wallet_accounts VALUES (?,?)').run(`0x${id.slice(0,40)}`,id);
   await service.command(a,'rename',['Pip']);await service.command(b,'rename',['Hazel']);await service.command(c,'rename',['Mabel']);
   check('New profiles do not populate global boards with zero records',(await service.leaderboard('genesis')).rows.length===0&&(await service.leaderboard('cooks')).rows.length===0);
   await clear(a,2,10);await clear(b,3,20);await clear(c,3,15);

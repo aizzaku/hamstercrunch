@@ -4,6 +4,7 @@ const path = require('node:path');
 const {createChainAdapter}=require('./squeek-chain.cjs');
 const {createBakeryService}=require('./bakery-service.cjs');
 const {createWalletAuth}=require('./wallet-auth.cjs');
+const {createLiveMarketWorker}=require('./live-market-worker.cjs');
 const siteConfig=require('./site-config.json');
 const chain=createChainAdapter();
 const production=process.env.NODE_ENV==='production';
@@ -13,6 +14,7 @@ const dataDir=path.resolve(process.env.DATA_DIR||path.join(__dirname,'.local'));
 fs.mkdirSync(dataDir,{recursive:true});
 const service=createBakeryService({filename:path.join(dataDir,'bakery.sqlite'),chain});
 const walletAuth=createWalletAuth({service});
+const liveMarketWorker=createLiveMarketWorker(service);
 const publicOrigin=process.env.PUBLIC_ORIGIN||(production?siteConfig.origin:null);
 const configuredOrigin=publicOrigin?new URL(publicOrigin):null;
 const walletConnectProjectId=process.env.WALLETCONNECT_PROJECT_ID||siteConfig.walletConnectProjectId||'';
@@ -24,6 +26,7 @@ function walletOrigin(req){
 }
 const types = {'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.png':'image/png','.mp3':'audio/mpeg','.wav':'audio/wav','.ogg':'audio/ogg','.m4a':'audio/mp4'};
 const files = new Set(['/index.html','/style.css','/arena.css','/bakery.css','/recipe-box.css','/recipe-core.js','/recipe-ui.js','/game.js','/levels.js','/engine.js','/bakery-art.js','/bakery-render.js','/bakery-audio.js','/radio.js','/assets/bakery-background.png','/assets/bakery-sprites.png','/assets/burrow-radio.png']);
+for(const size of [32,180,256])files.add(`/assets/hamster-${size}.png`);
 const server=http.createServer(async(req,res) => {
   const requestUrl=new URL(req.url,'http://localhost');
   const pathname=requestUrl.pathname;
@@ -39,6 +42,7 @@ const server=http.createServer(async(req,res) => {
       if(req.method==='GET'&&pathname==='/api/auth'){json(200,{...walletAuth.state(token),enabled:!production||!!configuredOrigin,walletConnectProjectId});return;}
       if(req.method==='GET'&&pathname==='/api/client-config'){json(200,{walletConnectProjectId});return;}
       if(req.method==='GET'&&pathname==='/api/profile'){json(200,service.profile(id));return;}
+      if(req.method==='GET'&&pathname==='/api/live-orders'){json(200,service.liveOrders(id));return;}
       if(req.method==='GET'&&pathname==='/api/bakery'){json(200,await chain.snapshot());return;}
       if(req.method==='GET'&&pathname==='/api/leaderboards'){json(200,await service.leaderboard(requestUrl.searchParams.get('board')||'genesis',id));return;}
       const authRoutes=['/api/auth/nonce','/api/auth/verify','/api/auth/restore','/api/auth/logout'];

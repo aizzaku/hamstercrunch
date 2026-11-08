@@ -17,7 +17,7 @@ async function main(){
   vm.runInContext(fs.readFileSync('bakery-client.js','utf8'),context);
   const client=context.createBakeryClient(storage,()=>changes++);
   await client.ready;
-  check('Existing local collection imports before play',calls.join(',')==='/api/profile,import'&&client.snapshot().name==='Pip');
+  check('Legacy save is handled by the server before play',calls.join(',')==='/api/profile,import'&&client.snapshot().name==='Pip');
   const run=client.startRun();await client.awardLevel(run,0,12.5);
   check('Commands stay in order',calls.slice(-2).join(',')==='startRun,awardLevel');
   check('Server changes notify UI',changes===4);

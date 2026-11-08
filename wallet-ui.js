@@ -3,20 +3,23 @@ const WalletUI=(()=>{
   const dialog=document.querySelector('#wallet-panel'),status=document.querySelector('#wallet-status');
   const browserButton=document.querySelector('#wallet-browser'),qrButton=document.querySelector('#wallet-qr'),logoutButton=document.querySelector('#wallet-logout');
   const restore=document.querySelector('#wallet-restore'),headerButton=document.querySelector('#save-bakery');
-  let auth=null,busy=false,resume=false,restoreToken=null,connector=null,flow=0;
+  let auth=null,busy=false,resume=false,restoreToken=null,connector=null,flow=0,prompted=false;
+  const savePrompt=document.querySelector('#save-bakery-prompt');
+  const promptKey='hamster-crunch-save-prompt-v1';
+  function dismissPrompt(){savePrompt.hidden=true;headerButton.classList?.remove('save-attention');}
   const short=address=>`${address.slice(0,6)}…${address.slice(-4)}`;
   async function request(url,body){const response=await fetch(url,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(15000)});const data=await response.json();if(!response.ok)throw new Error(data.error||data.message||'Sign-in unavailable. Try again.');return data;}
   function render(){
     headerButton.textContent=auth?.connected?'Saved ♡':'Save bakery';
     document.querySelector('#wallet-title').textContent=auth?.connected?'Bakery saved':'Save your bakery';
-    document.querySelector('#wallet-copy').textContent=auth?.connected?`Linked to ${short(auth.address)}. Sign in on another device to return.`:'Keep your recipes, treats and records across devices.';
+    document.querySelector('#wallet-copy').textContent=auth?.connected?`Linked to ${short(auth.address)}. Sign in on another device to return.`:'Connect for 5 daily rewarded runs and saved progress. Guest play is unlimited practice.';
     browserButton.hidden=!!auth?.connected;browserButton.disabled=busy||!auth?.enabled;
     qrButton.hidden=!!auth?.connected||!auth?.walletConnectProjectId;qrButton.disabled=busy;
     logoutButton.hidden=!auth?.connected;logoutButton.disabled=busy;
     document.querySelector('#wallet-footnote').hidden=!!auth?.connected;
   }
   async function refresh(){auth=await request('/api/auth');render();if(!auth.enabled)status.textContent='Wallet sign-in is being set up. Guest play is ready.';}
-  async function open(){resume=state==='playing';if(resume)pause();keys.clear();restore.hidden=true;restoreToken=null;status.textContent='';dialog.showModal();try{await RecipeProfile.settle();await refresh();}catch(error){status.textContent=error.message;}}
+  async function open(){dismissPrompt();resume=state==='playing';if(resume)pause();keys.clear();restore.hidden=true;restoreToken=null;status.textContent='';dialog.showModal();try{await RecipeProfile.settle();await refresh();}catch(error){status.textContent=error.message;}}
   async function loadConnector(){if(window.HamsterWalletConnect)return;await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='/walletconnect-provider.js';script.onload=resolve;script.onerror=()=>{script.remove();reject(new Error('WalletConnect could not load. Try again.'));};document.head.append(script);});}
   function messageHex(message){return '0x'+[...new TextEncoder().encode(message)].map(byte=>byte.toString(16).padStart(2,'0')).join('');}
   async function connect(kind){
@@ -54,6 +57,17 @@ const WalletUI=(()=>{
   document.querySelector('#wallet-keep-guest').addEventListener('click',()=>{restoreToken=null;restore.hidden=true;status.textContent='Guest bakery kept.';});
   logoutButton.addEventListener('click',async()=>{if(busy)return;busy=true;render();try{await RecipeProfile.settle();await request('/api/auth/logout',{});window.location.reload();}catch(error){status.textContent=error.message;}finally{busy=false;render();}});
   dialog.addEventListener('close',()=>{flow++;busy=false;restoreToken=null;connector?.cancel?.();connector=null;document.querySelector('#wallet-qr-code').hidden=true;keys.clear();if(resume&&state==='paused')action();resume=false;canvas.focus();});
-  RecipeProfile.settle().then(refresh).catch(()=>{status.textContent='Sign-in unavailable. Guest play is ready.';});
-  return {open,isOpen:()=>dialog.open};
+  const ready=RecipeProfile.settle().then(refresh).catch(()=>{status.textContent='Sign-in unavailable. Guest play is ready.';});
+  async function firstClear(){
+    if(prompted)return;
+    try{if(localStorage.getItem(promptKey))return;}catch(error){console.warn('Save prompt preference unavailable:',error);}
+    await ready;
+    if(auth?.connected||!auth?.enabled)return;
+    prompted=true;
+    try{localStorage.setItem(promptKey,'1');}catch(error){console.warn('Save prompt preference could not save:',error);}
+    savePrompt.hidden=false;headerButton.classList?.add('save-attention');
+  }
+  document.querySelector('#prompt-save-bakery').addEventListener('click',open);
+  document.querySelector('#prompt-save-later').addEventListener('click',dismissPrompt);
+  return {open,isOpen:()=>dialog.open,firstClear};
 })();

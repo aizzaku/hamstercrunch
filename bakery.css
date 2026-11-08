@@ -8,3 +8,10 @@ dialog{width:min(840px,calc(100vw - 24px));max-height:calc(100svh - 32px);border
 @media(max-width:400px){.brand-cookie{display:none}h1{font-size:18px}.radio-volume{display:none}.radio-label p{max-width:128px}.welcome-hamster{width:50px;height:50px}.overlay h2{font-size:24px}.overlay p{font-size:9px}}
 @media(max-height:600px){.welcome-hamster{display:none}.overlay h2{font-size:27px;margin:8px 0}.overlay p{font-size:10px;margin-bottom:10px}.overlay small{margin-top:7px}.pill{font-size:8px}#play{padding:9px 20px}}
 @media(prefers-reduced-motion:reduce){button{transition:none}}
+/* The game hamster doubles as the bakery mascot. */
+.brand-hamster{width:44px;height:44px;object-fit:contain;flex-shrink:0;filter:drop-shadow(0 2px 2px #946c5222)}
+.welcome-hamster{background:url('assets/hamster-256.png') center/contain no-repeat}
+@media(max-width:700px){.brand-hamster{width:32px;height:32px}}
+@media(max-width:400px){.brand-hamster{width:26px;height:26px}.bakery-brand{gap:5px}}
+#run-mode{font-size:10px;color:#a45d4e;text-align:center}
+@media(max-width:700px){.run-strip{height:42px;flex-wrap:wrap;row-gap:3px}#run-mode{order:3;flex-basis:100%}}

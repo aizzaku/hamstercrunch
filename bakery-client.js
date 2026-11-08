@@ -26,5 +26,6 @@ function createBakeryClient(storage,onChange){
     startSpecial:seed=>command('startSpecial',[seed]).then(result=>{if(!result.ok)throw new Error(result.message);return result.runId;}),
     awardSpecial:(id,elapsed)=>command('awardSpecial',[id,elapsed]),
     bake:id=>command('bake',[id]),fulfill:id=>command('fulfill',[id]),
+    queueSale:(recipe,quantity)=>command('queueSale',[recipe,quantity]),cancelSale:id=>command('cancelSale',[id]),
     buyIngredient:id=>command('buyIngredient',[id]),rename:name=>command('rename',[name])};
 }

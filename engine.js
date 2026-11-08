@@ -20,8 +20,10 @@ let wideLeft=0,slowLeft=0,fireLeft=0,shield=false,shake=0,toastLeft=0,started=fa
 let soundEnabled=true,audio=null,storageWarning=false,records=readRecords();
 let zoomCharge=0,zoomLeft=0,menuPaused=false,cleanupAnnounced=false;
 let recipeRunId=null,specialBatch=null;
+let rallyTime=0;
 function currentLayout(){return specialBatch?specialLayout(specialBatch.seed):LEVELS[level];}
-function startSpecialBatch(batch){reset();specialBatch=batch;loadLevel(0);overlay("SQUEEKTOSHI’S SPECIAL BATCH","A special<br>little batch.","Clear the tray. Earn ingredients.","LET’S CRUNCH");}
+function rallySpeed(){return currentLayout().speed*(1+Math.min(.75,rallyTime*.03));}
+function startSpecialBatch(batch){reset();specialBatch=batch;loadLevel(0);const practice=typeof RecipeProfile!=='undefined'&&RecipeProfile.canRewardRun&&!RecipeProfile.canRewardRun();overlay("SQUEEKTOSHI’S SPECIAL BATCH","A special<br>little batch.",practice?'Practice tray. No rewards or ranking.':'Clear the tray. Earn ingredients.',"LET’S CRUNCH");}
 function piercing(){return fireLeft>0||zoomLeft>0;}
 function activateZoomies(){
   if(state!=='playing'||zoomCharge<100||zoomLeft>0)return false;
@@ -76,6 +78,7 @@ async function enableSound(preview=false){
   finally{ui.sound.disabled=false;if(!soundEnabled){ui.sound.textContent='♪ Sound off';ui.sound.setAttribute('aria-pressed','false');}}
 }
 function sync() {
+  if(typeof RecipeProfile!=='undefined'&&RecipeProfile.runStatus){const label=document.getElementById('run-mode');if(label)label.textContent=RecipeProfile.runStatus(started);}
   ui.score.textContent=String(score).padStart(5,'0');ui.lives.textContent='♥'.repeat(lives);
   ui.remaining.textContent=bricks.filter(b=>b.alive).length;
   ui.level.textContent=specialBatch?'SPECIAL':`${String(level+1).padStart(2,'0')} / ${LEVELS.length}`;
@@ -102,7 +105,7 @@ function overlay(status,title,hint,button) {
 function notify(message) {ui.toast.textContent=message;toastLeft=3;ui.toast.hidden=false;}
 function newBall(x,y,vx=120,vy=-300) {return {x,y,r:12,vx,vy,rotation:0,trail:[]};}
 function dock() {balls=[newBall(paddle.x+paddle.w/2,paddle.y-16,120,-Math.sqrt(currentLayout().speed**2-120**2))];}
-function clearEffects() {wideLeft=0;slowLeft=0;fireLeft=0;zoomLeft=0;shield=false;drops=[];combo=0;comboLeft=0;}
+function clearEffects() {rallyTime=0;wideLeft=0;slowLeft=0;fireLeft=0;zoomLeft=0;shield=false;drops=[];combo=0;comboLeft=0;}
 function loadLevel(index) {
   level=index;const generated=makeLevel(index,specialBatch?currentLayout():null);bricks=generated.bricks;obstacles=generated.obstacles;
   clearEffects();cleanupAnnounced=false;paddle.w=generated.width;paddle.x=(W-paddle.w)/2;levelTime=0;worldTime=0;kills=0;powerCursor=0;particles=[];keys.clear();dock();state='ready';ui.overlay.hidden=true;
@@ -145,7 +148,8 @@ function finishLevel() {
   if(specialBatch){
     if(typeof RecipeProfile!=='undefined')RecipeProfile.awardSpecial(recipeRunId,runTime);
     state='won';saved=true;tone(1000,.25,'triangle');
-    overlay('SPECIAL BATCH CLEARED','Freshly<br>crunched!',`${formatTime(runTime)} · Saving reward…`,'BACK TO GENESIS');return;
+    const practice=typeof RecipeProfile!=='undefined'&&RecipeProfile.isRewardedRun&&!RecipeProfile.isRewardedRun();
+    overlay('SPECIAL BATCH CLEARED','Freshly<br>crunched!',`${formatTime(runTime)} · ${practice?'Practice complete':'Saving reward…'}`,'BACK TO GENESIS');return;
   }
   if(typeof RecipeProfile!=='undefined')RecipeProfile.awardLevel(recipeRunId,level,runTime);
   splits.push(levelTime);renderSplits();tone(1000,.25,'triangle');
@@ -160,7 +164,7 @@ function applyPower(id) {
   if(id==='fire')fireLeft=10;
   if(id==='shield')shield=true;
   if(id==='heart')lives=Math.min(5,lives+1);
-  if(id==='multi'&&balls.length){const source=balls[0];for(const angle of [-.55,.55]){if(balls.length>=5)break;const direction=Math.atan2(source.vy,source.vx)+angle;const speed=currentLayout().speed;const vx=Math.cos(direction)*speed,vy=Math.sin(direction)*speed;balls.push(newBall(source.x,source.y,vx,Math.abs(vy)<120?-120:vy));}}
+  if(id==='multi'&&balls.length){const source=balls[0];for(const angle of [-.55,.55]){if(balls.length>=5)break;const direction=Math.atan2(source.vy,source.vx)+angle;const speed=rallySpeed();const vx=Math.cos(direction)*speed,vy=Math.sin(direction)*speed;balls.push(newBall(source.x,source.y,vx,Math.abs(vy)<120?-120:vy));}}
   notify(`${power.icon} ${power.name} · ${power.description}`);tone(850,.16,'triangle');sync();
 }
 function hitBrick(b,hamster,blast=false) {
@@ -187,7 +191,7 @@ function aimLastCrumbs(b){
   if(!remaining.length||remaining.length>3)return;
   const target=remaining.reduce((best,brick)=>Math.abs(brick.x+brick.w/2-b.x)<Math.abs(best.x+best.w/2-b.x)?brick:best);
   const dx=target.x+target.w/2-b.x,dy=target.y+target.h/2-b.y;
-  const length=Math.hypot(dx,dy),speed=currentLayout().speed;
+  const length=Math.hypot(dx,dy),speed=rallySpeed();
   b.vx=dx/length*speed;b.vy=dy/length*speed;
 }
 function overlaps(b,rect) {return b.x+b.r>rect.x&&b.x-b.r<rect.x+rect.w&&b.y+b.r>rect.y&&b.y-b.r<rect.y+rect.h;}
@@ -203,6 +207,8 @@ function step(dt) {
   paddle.x=Math.max(0,Math.min(W-paddle.w,paddle.x+move*560*dt));
   if(started){runTime+=dt;levelTime+=dt;}
   if(state==='ready'){dock();sync();return;}
+  const previousSpeed=rallySpeed();rallyTime=Math.min(25,rallyTime+dt);const acceleration=rallySpeed()/previousSpeed;
+  for(const b of balls){b.vx*=acceleration;b.vy*=acceleration;}
   worldTime+=dt;wideLeft=Math.max(0,wideLeft-dt);slowLeft=Math.max(0,slowLeft-dt);fireLeft=Math.max(0,fireLeft-dt);zoomLeft=Math.max(0,zoomLeft-dt);comboLeft=Math.max(0,comboLeft-dt);shake=Math.max(0,shake-dt*24);
   if(!wideLeft&&paddle.w!==currentLayout().width){const center=paddle.x+paddle.w/2;paddle.w=currentLayout().width;paddle.x=Math.max(0,Math.min(W-paddle.w,center-paddle.w/2));}
   obstacles.forEach(o=>{if(o.moving)o.x=o.baseX+Math.sin(worldTime*1.1+o.phase)*90;});
@@ -212,7 +218,7 @@ function step(dt) {
     if(b.x>W-b.r){b.x=W-b.r;b.vx=-Math.abs(b.vx);}
     if(b.y<b.r){b.y=b.r;b.vy=Math.abs(b.vy);}
     if(b.vy>0&&py+b.r<=paddle.y&&b.y+b.r>=paddle.y&&b.x+b.r>paddle.x&&b.x-b.r<paddle.x+paddle.w){
-      const offset=Math.max(-1,Math.min(1,(b.x-paddle.x-paddle.w/2)/(paddle.w/2)));const angle=offset*Math.PI/3;const speed=currentLayout().speed;
+      const offset=Math.max(-1,Math.min(1,(b.x-paddle.x-paddle.w/2)/(paddle.w/2)));const angle=offset*Math.PI/3;const speed=rallySpeed();
       b.vx=speed*Math.sin(angle);if(Math.abs(b.vx)<35)b.vx=35*(offset<0?-1:1);b.vy=-Math.sqrt(speed**2-b.vx**2);b.y=paddle.y-b.r;aimLastCrumbs(b);combo=0;comboLeft=0;if(soundEnabled&&typeof BakeryAudio!=='undefined')BakeryAudio.play(audio,'wood');
     }
     if(shield&&b.vy>0&&b.y+b.r>=H-12&&py+b.r<H-12){b.y=H-12-b.r;b.vy=-Math.abs(b.vy);shield=false;burst(b.x,H-12,'#b8b2f4',20);notify('NET SAVE!');tone(650,.12);}

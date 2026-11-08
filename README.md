@@ -87,3 +87,24 @@ Burrow Radio plays ten two-minute user-provided ElevenLabs MP3s from `assets/mus
 `site-config.json` holds the public Railway origin and public Reown project ID. `PUBLIC_ORIGIN` and `WALLETCONNECT_PROJECT_ID` override these defaults. Configure the production origin and Reown allowed domain together if the hostname changes. Browser extensions and WalletConnect support Ethereum EOA message signatures; smart contract wallet signature support has not been added. Wallet sign-in is identity/recovery, not proof of fair gameplay.
 
 Run `npm ci`, `npm run check`, `npm test`. If the connector source changes, run `npm run build:wallet` and include the generated `walletconnect-provider.js`. Docker installs locked runtime dependencies; the generated browser bundle is already included. `node verify-deploy.cjs` runs an isolated production-mode HTTP test with synthetic wallet signatures and a temporary database.
+
+
+## Live orders and bakery navigation
+
+Main tabs are Live Bakery, Recipes, Orders, Collection and Profile. Pantry is a Recipes subview. The Recipe Box header button always starts at Recipes; the highlighted Live Bakery button opens the market. Every area has a short description. A one-time nonblocking save prompt appears for guests after the first saved level clear; wallet-linked players are not prompted.
+
+Orders has Casual and Live views. Casual neighbor orders trade baked treats for stamps and XP. Live orders reserve a chosen quantity of treats for one automatic sale at the next verified opening. Reserved treats leave available stock immediately, so manual sales and casual orders cannot spend them. Canceling a still-pending order returns the treats exactly once. Limits are 24 pending orders per bakery and 1,000 treats per order.
+
+A server worker checks the wheel every 30 seconds only while reservations exist. Sales require fresh hardware telemetry plus confirmed settlement prices. Orders created during an existing opening wait until the worker observes fresh resting telemetry followed by fresh running telemetry; a new settlement seed during the same continuous run does not release them. An outage or unknown state never counts as resting. Missed short openings are not reconstructed later. Pending reservations and receipts survive process restarts and wallet recovery.
+
+Live order cards show the price formula’s possible per-treat range, the most recent actual sale price, and an estimated total range for the selected quantity. These are not guaranteed quotes. Receipts record the real quantity, unit price and points at execution; both manual and queued sales update the same sold/earned totals and global rankings. The latest 30 receipts and last sale for each recipe are retained.
+
+Offline execution requires the Node service to remain running with a persistent volume. Railway sleep, exhausted credit or deployment downtime can delay sales or miss an opening. Keep one service replica, monitor usage and use an always-available hosting plan for reliable offline fulfillment. No financial tokens or real-money sales are involved.
+
+## Daily rewarded runs and automation limits
+
+Each verified wallet gets five rewarded launches per UTC day, shared across campaign and Special Batch. Launching consumes a slot; losing a life or moving to the next level does not. After five launches, play continues as practice. Guests also play practice. Practice clears grant no ingredients, XP, Special Batch claim, or global arcade ranking. A rewarded run admitted before midnight stays rewarded if completed after midnight. Sign-in restores the same canonical bakery and its allowance across devices.
+
+The game HUD and Profile show the remaining allowance or Practice mode. Daily limits use the server clock and SQLite transactions, not browser storage. New browser resource/stat imports are blocked; the original local save and existing server bakeries remain intact.
+
+This is a reward rate limit, not proof of human play. Client-reported clears still lack server-verified physics or input replays, and one person can control multiple wallets. Suspicious timing or repetitive inputs can support review but cannot reliably distinguish a skilled player, accessibility tooling, and a bot. Do not automatically ban players on score or precision alone. A stronger next step is server-issued run seeds with deterministic input-replay validation and replay/overlap rejection; this validates gameplay, not humanity.

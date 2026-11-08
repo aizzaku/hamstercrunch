@@ -26,4 +26,7 @@ returning.node('tip-bake').listeners.click();
 check('Baking nudge opens recipes then stays dismissed',returning.node('bakery-nudge').hidden&&returning.counts.bakes===1);
 vm.runInContext('Onboarding.firstClear()',returning.context);
 check('Later clears do not repeat the baking nudge',returning.node('bakery-nudge').hidden);
+let savePrompts=0;returning.context.WalletUI={firstClear(){savePrompts++;}};
+vm.runInContext('Onboarding.firstClear()',returning.context);
+check('Save prompt still receives a clear after the baking nudge was seen',savePrompts===1);
 console.log(`${count} onboarding checks passed.`);
