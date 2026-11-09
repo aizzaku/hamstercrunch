@@ -44,6 +44,9 @@ function check(name,value){assert.ok(value,name);count++;console.log('PASS '+nam
   check('Baker names remain safe literal text',element('#baker-name').textContent==='<b>Pip</b>’s Bakery');
   await button('Pantry').fire('click');
   check('Pantry stays inside Recipes with its own explanation',tabs[1].attributes['aria-selected']==='true'&&text(element('#recipe-content')).includes('Your ingredients.'));
+  const pantryCards=element('#recipe-content').children.find(item=>item.className==='pantry-grid').children;
+  check('Every ingredient has artwork and a rarity label',pantryCards.length===12&&pantryCards.every(card=>card.children.some(item=>item.tagName==='IMG'&&item.src.startsWith('assets/ingredients/'))&&card.children.some(item=>item.className.startsWith('rarity-badge'))));
+  check('Pantry shows chance odds and rarity-priced restocking',text(element('#recipe-content')).includes('18% chance')&&text(element('#recipe-content')).includes('Epic 1%')&&!!button('Restock · 30 stamps'));
   await tabs[2].fire('click');
   check('Orders has a casual neighbor-order view',text(element('#recipe-content')).includes('Casual orders: serve neighbors')&&!!button('Live'));
   await button('Live').fire('click');await tick();

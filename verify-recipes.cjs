@@ -5,7 +5,11 @@ let randomValue=.99;
 const random=()=>randomValue,now=()=> '2026-11-06T12:00:00.000Z';
 let box=createRecipeBox(store,random,now),count=0;
 function check(name,condition){assert.ok(condition,name);console.log(`PASS ${name}`);count++;}
-check('Twelve recipes and eight ingredients',RecipeData.recipes.length===12&&RecipeData.ingredients.length===8);
+check('Twenty recipes and twelve ingredients',RecipeData.recipes.length===20&&RecipeData.ingredients.length===12);
+check('Four tiers define explicit drop weights totaling 100',RecipeData.rarities.map(r=>r.id).join(',')==='common,uncommon,rare,epic'&&RecipeData.rarities.reduce((sum,r)=>sum+r.weight,0)===100&&RecipeData.loot.chance===.18);
+check('Every ingredient has rarity, an individual image and tier-priced restocking',RecipeData.ingredients.every(i=>RecipeData.rarities.some(r=>r.id===i.rarity&&r.restockCost===i.restockCost)&&i.image===`assets/ingredients/${i.id}.png`));
+check('Recipe rarity follows its rarest ingredient',RecipeData.recipes.every(recipe=>RecipeData.rarities.findIndex(r=>r.id===recipe.rarity)===Math.max(...Object.keys(recipe.needs).map(id=>RecipeData.rarities.findIndex(r=>r.id===RecipeData.ingredients.find(i=>i.id===id).rarity)))));
+check('Epic recipes and new ingredients are represented',RecipeData.recipes.filter(r=>r.rarity==='epic').length===2&&['eggs','milk','almond','saffron'].every(id=>RecipeData.recipes.some(r=>r.needs[id])));
 check('Starter pantry supports first bake',box.snapshot().pantry.flour===3&&box.snapshot().recipes['butter-paws'].scraps===2);
 check('Undiscovered recipes cannot consume ingredients',!box.bake('genesis-feast').ok&&box.snapshot().pantry.flour===3);
 check('Baking consumes correct quantities and produces food',box.bake('butter-paws').ok&&box.snapshot().pantry.flour===2&&box.snapshot().pantry.butter===1&&box.snapshot().food['butter-paws']===2);
@@ -16,17 +20,21 @@ check('Serving consumes baked food and grants rewards',box.fulfill(order.id).ok&
 check('Served order cannot be claimed twice',!box.fulfill(order.id).ok&&box.snapshot().ordersDone===1);
 check('Collection card survives serving',!!box.snapshot().recipes['butter-paws'].firstBaked);
 check('Insufficient food does not consume pantry',!box.fulfill(box.snapshot().orders.find(o=>o.quantity>1).id).ok&&box.snapshot().pantry.flour===2);
-check('Stamps buy a chosen ingredient',box.buyIngredient('strawberry').ok&&box.snapshot().pantry.strawberry===1&&box.snapshot().stamps===3);
+check('Rare restocking rejects insufficient stamps without changing inventory',!box.buyIngredient('strawberry').ok&&box.snapshot().pantry.strawberry===0&&box.snapshot().stamps===6);
+check('Stamps buy a chosen common ingredient',box.buyIngredient('sugar').ok&&box.snapshot().pantry.sugar===2&&box.snapshot().stamps===3);
 check('Unknown ingredient cannot spend stamps',!box.buyIngredient('unknown').ok&&box.snapshot().stamps===3);
 const run=box.startRun();
-check('A clear always grants a common ingredient',box.awardLevel(run,0).some(r=>r.startsWith('+1'))&&box.snapshot().clears===1);
+const pantryBeforeClears=JSON.stringify(box.snapshot().pantry);
+check('A clear grants XP without automatically granting an ingredient',box.awardLevel(run,0).join(',')==='+5 XP'&&box.snapshot().clears===1&&JSON.stringify(box.snapshot().pantry)===pantryBeforeClears);
 check('Duplicate clear grants nothing',box.awardLevel(run,0).length===0&&box.snapshot().clears===1);
 check('Skipped levels cannot claim loot',box.awardLevel(run,3).length===0);
-box.awardLevel(run,1);const pity=box.awardLevel(run,2);
-check('Three dry clears guarantee bonus ingredient',pity.filter(r=>r.startsWith('+1')).length===2&&box.snapshot().ingredientDry===0);
+box.awardLevel(run,1);box.awardLevel(run,2);
+check('Dry clears never force an ingredient award',JSON.stringify(box.snapshot().pantry)===pantryBeforeClears);
 for(let level=3;level<8;level++)box.awardLevel(run,level);
-check('Eight dry clears guarantee recipe scrap',Object.values(box.snapshot().recipes).some(r=>r.scraps===1)&&box.snapshot().scrapDry===0);
-check('Run basket accumulates rewards',box.snapshot().activeRun.loot.length>=10);
+check('Eight dry clears do not guarantee a recipe scrap',!Object.values(box.snapshot().recipes).some(r=>r.scraps===1)&&box.snapshot().scrapDry===8);
+check('Run basket accumulates clear XP',box.snapshot().activeRun.loot.length===8);
+check('Server-issued ingredient catches add one ingredient and a receipt',box.collectIngredient('strawberry').ok&&box.snapshot().pantry.strawberry===1&&box.snapshot().activeRun.loot.includes('+1 Strawberries'));
+check('Unknown ingredient catches cannot mint inventory',!box.collectIngredient('unknown').ok&&box.snapshot().pantry.unknown===undefined);
 box=createRecipeBox(store,random,now);
 check('Progress survives reload without duplicate starter bundle',box.snapshot().ordersDone===1&&box.snapshot().recipes['butter-paws'].batches===1&&box.snapshot().pantry.strawberry>=1);
 const before=box.snapshot().clears;
@@ -43,11 +51,20 @@ const damaged=createRecipeBox(brokenStore,random,now);
 check('Unreadable saves are preserved and mutations disabled',damaged.snapshot().readOnly&&!damaged.bake('butter-paws').ok&&damaged.startRun()===null);
 const unavailable=createRecipeBox({getItem:()=>null,setItem(){throw new Error('Expected quota failure');}},random,now);
 check('Storage failure is explicit and visit progress remains usable',!!unavailable.snapshot().warning&&unavailable.bake('butter-paws').ok);
-// Complete a fresh deterministic collection and verify all 12 recipes are attainable.
+// Complete a fresh deterministic collection and verify every rarity is attainable.
 const completionMemory=new Map(),completionStore={getItem:k=>completionMemory.get(k)||null,setItem:(k,v)=>completionMemory.set(k,v)};
 const complete=createRecipeBox(completionStore,()=>0,now);
 for(let runIndex=0;runIndex<2;runIndex++){const id=complete.startRun();for(let level=0;level<21;level++)complete.awardLevel(id,level);}
-check('All recipes can be discovered and excess scraps turn into stamps',Object.values(complete.snapshot().recipes).filter(r=>r.scraps===2).length===12&&complete.snapshot().stamps>0);
+check('All twenty recipes can be discovered and excess scraps turn into stamps',Object.values(complete.snapshot().recipes).filter(r=>r.scraps===2).length===20&&complete.snapshot().stamps>0);
 check('Full campaign clear persists its final claim ledger',complete.snapshot().activeRun.lastLevel===20&&createRecipeBox(completionStore,()=>0,now).snapshot().activeRun.lastLevel===20);
 check('Level 22 and duplicate final clears grant nothing',complete.awardLevel(complete.snapshot().activeRun.id,21).length===0&&complete.awardLevel(complete.snapshot().activeRun.id,20).length===0);
+const epicRolls=[0,.999,0],epic=createRecipeBox({getItem:()=>null,setItem(){}},()=>epicRolls.shift()??0,now),epicRun=epic.startRun();epic.awardLevel(epicRun,0);
+check('A rare weighted roll can discover an epic recipe scrap',epic.snapshot().recipes['saffron-sunbursts']?.scraps===1);
+const legacy=box.snapshot();legacy.pantry.cocoa=7;legacy.stamps=99;legacy.food['butter-paws']=9;legacy.recipes['butter-paws'].firstBaked=now();
+for(const id of ['eggs','milk','almond','saffron'])delete legacy.pantry[id];
+for(const recipe of RecipeData.recipes.slice(12)){delete legacy.food[recipe.id];delete legacy.recipes[recipe.id];}
+const migrated=createRecipeBox({getItem:()=>JSON.stringify(legacy),setItem(){}},()=>.99,now);
+check('Version-one inventories and unlocked collections survive catalog expansion',migrated.snapshot().pantry.cocoa===7&&migrated.snapshot().food['butter-paws']===9&&migrated.snapshot().recipes['butter-paws'].firstBaked===now()&&migrated.snapshot().stamps===99);
+check('New ingredient and food slots start empty for existing saves',['eggs','milk','almond','saffron'].every(id=>migrated.snapshot().pantry[id]===0)&&RecipeData.recipes.slice(12).every(recipe=>migrated.snapshot().food[recipe.id]===0&&!migrated.snapshot().recipes[recipe.id]));
+check('Epic restocking spends its tier cost exactly once',migrated.buyIngredient('saffron').ok&&migrated.snapshot().pantry.saffron===1&&migrated.snapshot().stamps===69);
 console.log(`${count} recipe progression checks passed.`);

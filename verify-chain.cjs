@@ -1,5 +1,6 @@
 const assert=require('node:assert/strict');
 const {normalizeStatus,selectSettlement,createBatch,createChainAdapter}=require('./squeek-chain.cjs');
+const {RecipeData}=require('./recipe-core.js');
 let tests=0;
 function check(name,fn){fn();tests++;console.log(`PASS ${name}`);}
 const now=Date.parse('2026-11-06T12:00:00Z');
@@ -19,7 +20,9 @@ check('unsafe settlement cannot seed offers',()=>{const s=settlements();s.recent
 check('future block cannot seed offers',()=>{const s=settlements();s.recentSettlements[0].ethereumBlockNumber='101';assert.equal(selectSettlement(s),null);});
 check('empty rounds do not churn batch seed',()=>{const s=settlements();s.recentSettlements.unshift({...s.recentSettlements[0],settledThroughRound:'11',workAdded:'0'});assert.equal(selectSettlement(s).round,'10');});
 check('sorts arbitrary precision round IDs',()=>{const s=settlements();s.recentSettlements.push({...s.recentSettlements[0],settledThroughRound:'900719925474099399'});assert.equal(selectSettlement(s).round,'900719925474099399');});
-check('shared batch is deterministic',()=>{const s=selectSettlement(settlements());assert.deepEqual(createBatch(s),createBatch(s));assert.equal(createBatch(s).offers.length,12);assert.ok(createBatch(s).offers.every(o=>Number.isInteger(o.price)&&o.price>0));});
+check('shared batch is deterministic',()=>{const s=selectSettlement(settlements());assert.deepEqual(createBatch(s),createBatch(s));assert.equal(createBatch(s).offers.length,20);assert.ok(createBatch(s).offers.every(o=>Number.isInteger(o.price)&&o.price>0));});
+check('market ranges use rarity-weighted recipe cost',()=>{const batch=createBatch(selectSettlement(settlements()));for(const offer of batch.offers){const recipe=RecipeData.recipes.find(r=>r.id===offer.recipe),base=Math.max(3,Math.ceil(RecipeData.recipeValue(recipe)*3/recipe.yield));assert.equal(offer.rangeMin,Math.max(1,Math.round(base*.75)));assert.equal(offer.rangeMax,Math.max(1,Math.round(base*1.5)));assert.ok(offer.price>=offer.rangeMin&&offer.price<=offer.rangeMax);}assert.ok(batch.offers.find(o=>o.recipe==='royal-saffron-tarts').rangeMin>batch.offers.find(o=>o.recipe==='butter-paws').rangeMax);});
+check('featured ingredients remain deterministic and favor common tiers',()=>{const counts={common:0,uncommon:0,rare:0,epic:0},settled=selectSettlement(settlements());for(let round=0;round<1000;round++){const featured=createBatch({...settled,round:String(round)}).special.ingredient;counts[RecipeData.ingredients.find(i=>i.id===featured).rarity]++;}assert.ok(counts.common>counts.uncommon&&counts.uncommon>counts.rare&&counts.rare>counts.epic&&counts.epic>0);});
 check('missing anchor never invents batch',()=>assert.deepEqual(createBatch(null),{seed:null,special:null,offers:[]}));
 async function verify(){
   let clock=now,calls=0,fail=false;

@@ -5,6 +5,7 @@ const {createChainAdapter}=require('./squeek-chain.cjs');
 const {createBakeryService}=require('./bakery-service.cjs');
 const {createWalletAuth}=require('./wallet-auth.cjs');
 const {createLiveMarketWorker}=require('./live-market-worker.cjs');
+const {RecipeData}=require('./recipe-core.js');
 const siteConfig=require('./site-config.json');
 const chain=createChainAdapter();
 const production=process.env.NODE_ENV==='production';
@@ -27,6 +28,7 @@ function walletOrigin(req){
 const types = {'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.png':'image/png','.mp3':'audio/mpeg','.wav':'audio/wav','.ogg':'audio/ogg','.m4a':'audio/mp4'};
 const files = new Set(['/index.html','/style.css','/arena.css','/bakery.css','/recipe-box.css','/recipe-core.js','/recipe-ui.js','/game.js','/levels.js','/engine.js','/bakery-art.js','/bakery-render.js','/bakery-audio.js','/radio.js','/assets/bakery-background.png','/assets/bakery-sprites.png','/assets/burrow-radio.png']);
 for(const size of [32,180,256])files.add(`/assets/hamster-${size}.png`);
+for(const ingredient of RecipeData.ingredients)files.add(`/${ingredient.image}`);
 const server=http.createServer(async(req,res) => {
   const requestUrl=new URL(req.url,'http://localhost');
   const pathname=requestUrl.pathname;

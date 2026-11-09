@@ -33,10 +33,10 @@ async function campaign(id,count=1){const start=await service.command(id,'startR
   check('Campaign entry counts once at launch and returns its original run ID type',typeof first.start.result==='number'&&first.start.profile.activeRunRewarded&&first.start.profile.runAllowance.used===1&&first.awards[0].result.length>0);
   check('Repeated level claims never award twice',(await service.command(id,'awardLevel',[first.start.result,0,1])).result.length===0);
   const second=await service.command(id,'startSpecial',[seed]);wall+=1000;await service.command(id,'awardSpecial',[second.result.runId,1]);
-  check('Special Batch shares the campaign quota and grants its normal reward',second.result.rewarded&&profile(id).runAllowance.used===2&&profile(id).pantry.cocoa===3);
+  check('Special Batch shares the campaign quota without guaranteed ingredients',second.result.rewarded&&profile(id).runAllowance.used===2&&profile(id).pantry.cocoa===0);
   await service.command(id,'startRun');
   const fourth=await service.command(id,'startSpecial',[seed]);wall+=1000;const replay=await service.command(id,'awardSpecial',[fourth.result.runId,1]);
-  check('Rewarded Special replays count as entries without repeating ingredients',fourth.result.rewarded&&profile(id).runAllowance.used===4&&replay.result.rewards.length===0&&profile(id).pantry.cocoa===3);
+  check('Rewarded Special replays count as entries without repeating clear rewards',fourth.result.rewarded&&profile(id).runAllowance.used===4&&replay.result.rewards.length===0&&profile(id).pantry.cocoa===0);
   const fifth=await service.command(id,'startRun');
   check('The fifth launch is rewarded and exhausts the daily allowance',fifth.profile.activeRunRewarded&&fifth.profile.runAllowance.used===5&&fifth.profile.runAllowance.remaining===0);
   const exhaustedBefore=economic(profile(id));

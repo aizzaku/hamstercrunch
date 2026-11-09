@@ -31,11 +31,12 @@ function linkRewardFixture(target,id){createWalletAuth({service:target});target.
   market={...market,status:'unknown'};check('Stale or unavailable telemetry pauses sales',!(await service.sell(id,{recipe:'butter-paws',quantity:1,seed:'seed-one'})).result.ok);
   const special=await service.command(id,'startSpecial',['seed-one']);
   check('Special Batch can start while bakery is resting',special.result.ok&&!!special.result.runId);
+  const specialPantry=JSON.stringify(special.profile.pantry),specialXp=special.profile.xp;
   wall+=10000;result=await service.command(id,'awardSpecial',[special.result.runId,10]);
-  check('Special reward grants featured ingredient independently of campaign',result.result.ok&&result.profile.pantry.cocoa===3&&result.profile.clears===0);
+  check('Special clear grants XP independently without guaranteed ingredients',result.result.ok&&JSON.stringify(result.profile.pantry)===specialPantry&&result.profile.xp===specialXp+20&&result.profile.clears===0);
   check('Special clear cannot be claimed twice',!(await service.command(id,'awardSpecial',[special.result.runId,10])).result.ok);
   const replay=await service.command(id,'startSpecial',['seed-one']);wall+=5000;const replayed=await service.command(id,'awardSpecial',[replay.result.runId,5]);
-  check('Special replays improve times without repeating ingredient rewards',replayed.result.ok&&replayed.result.rewards.length===0&&replayed.profile.pantry.cocoa===3&&(await service.leaderboard('special',id)).viewer.time===5);
+  check('Special replays improve times without repeating clear rewards',replayed.result.ok&&replayed.result.rewards.length===0&&replayed.profile.pantry.cocoa===0&&(await service.leaderboard('special',id)).viewer.time===5);
   check('Unknown commands roll back without losing data',await service.command(id,'invalid').then(()=>false,()=>service.profile(id).profile.bakeryPoints===7));
   market={...market,status:'open'};
   const simultaneous=await Promise.all([service.sell(id,{recipe:'butter-paws',quantity:1,seed:'seed-one'}),service.sell(id,{recipe:'butter-paws',quantity:1,seed:'seed-one'})]);
@@ -54,6 +55,6 @@ function linkRewardFixture(target,id){createWalletAuth({service:target});target.
   const restored=disk.profile(diskId);
   check('SQLite reopen preserves session, collection, inventory and points',disk.session(diskId)===diskId&&!restored.needsImport&&restored.profile.name==='Isaac'&&restored.profile.food['butter-paws']===1&&restored.profile.bakeryPoints===7&&!!restored.profile.recipes['butter-paws'].firstBaked);
   const restoredReplay=await disk.command(diskId,'startSpecial',['seed-one']);wall+=5000;const restoredReward=await disk.command(diskId,'awardSpecial',[restoredReplay.result.runId,5]);
-  check('Special claim ledger survives server restart',restoredReward.result.ok&&restoredReward.result.rewards.length===0&&restoredReward.profile.pantry.cocoa===3);
+  check('Special claim ledger survives server restart',restoredReward.result.ok&&restoredReward.result.rewards.length===0&&restoredReward.profile.pantry.cocoa===0);
   disk.close();console.log(`${count} bakery service checks passed.`);
 })().catch(error=>{console.error(error);process.exitCode=1;});

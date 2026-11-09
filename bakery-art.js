@@ -2,6 +2,13 @@
 const BakeryArt = (() => {
   const atlas = document.createElement('img');
   let ready = false;
+  const ingredientImages=new Map();
+  function ingredient(ctx,id,x,y,w,h){
+    if(!/^[a-z]+$/.test(id))return false;
+    if(!ingredientImages.has(id)){const image=document.createElement('img');image.src=`assets/ingredients/${id}.png`;ingredientImages.set(id,image);}
+    const image=ingredientImages.get(id);if(!image.complete||!image.naturalWidth)return false;
+    const target=fitRect(image.naturalWidth,image.naturalHeight,x,y,w,h);ctx.drawImage(image,target.x,target.y,target.width,target.height);return true;
+  }
   atlas.onload = () => { ready = true; };
   atlas.onerror = () => console.warn('Bakery sprites unavailable; using drawn fallbacks.');
   atlas.src = 'assets/bakery-sprites.png';
@@ -25,5 +32,5 @@ const BakeryArt = (() => {
     ctx.drawImage(atlas,sx*atlas.naturalWidth,sy*atlas.naturalHeight,sourceWidth,sourceHeight,target.x,target.y,target.width,target.height);
     return true;
   }
-  return {sprite,fitRect};
+  return {sprite,ingredient,fitRect};
 })();

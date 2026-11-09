@@ -2,6 +2,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const {Wallet}=require('ethers');
 const {createBakeryService}=require('./bakery-service.cjs');
+const {RecipeData}=require('./recipe-core.js');
 const {createWalletAuth}=require('./wallet-auth.cjs');
 const {createBatch}=require('./squeek-chain.cjs');
 const {createLiveMarketWorker}=require('./live-market-worker.cjs');
@@ -53,7 +54,7 @@ async function main(){
   const manual=await player(service);await service.sell(manual,{recipe:'butter-paws',quantity:1,seed:market.seed});
   check('Manual and queued sales share trustworthy receipt and last-price stats',service.profile(manual).profile.lastSales['butter-paws'].unitPrice===4&&service.profile(manual).profile.saleReceipts[0].kind==='manual'&&service.liveOrders(manual).totalSold===1);
   const batch=createBatch({chainId:'11155111',transactionHash:'0x'+'1'.repeat(64),round:'100'});
-  check('Every recipe exposes a bounded possible price range',batch.offers.length===12&&batch.offers.every(offer=>offer.rangeMin>=1&&offer.price>=offer.rangeMin&&offer.price<=offer.rangeMax));
+  check('Every recipe exposes a bounded possible price range',batch.offers.length===RecipeData.recipes.length&&batch.offers.every(offer=>offer.rangeMin>=1&&offer.price>=offer.rangeMin&&offer.price<=offer.rangeMax));
   market.status='closed';const wallet=Wallet.createRandom(),identity=await player(service,wallet);await service.command(identity,'queueSale',['butter-paws',1]);
   const auth=createWalletAuth({service,now:()=>wall}),origin='https://hamstercrunch.fun';
   const message=auth.issue(identity,{address:wallet.address,chainId:1},origin).message;

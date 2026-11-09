@@ -1,12 +1,13 @@
 const {DatabaseSync}=require('node:sqlite');
 const {randomBytes,createHash}=require('node:crypto');
 const {createRecipeBox,RecipeData}=require('./recipe-core.js');
-const {LEVELS,CAMPAIGN_VERSION}=require('./levels.js');
+const {LEVELS,CAMPAIGN_VERSION,makeLevel,specialLayout}=require('./levels.js');
+const {createIngredientLootPlan,publicIngredientLootPlan}=require('./ingredient-loot.cjs');
 const BOARDS=['genesis','speed','cooks','sells','fortune','collection','special'];
 
 // Server owns inventory and sale receipts. Arcade clears remain client-reported
 // beta progress; this is not a proof-of-play or a redeemable token economy.
-function createBakeryService({filename=':memory:',chain,now=()=>new Date().toISOString()}={}){
+function createBakeryService({filename=':memory:',chain,now=()=>new Date().toISOString(),lootRandom}={}){
   const db=new DatabaseSync(filename);
   db.exec('CREATE TABLE IF NOT EXISTS players (id TEXT PRIMARY KEY, profile TEXT, meta TEXT NOT NULL)');
   db.exec('CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, player_id TEXT NOT NULL, expires_at INTEGER NOT NULL, revoked INTEGER NOT NULL DEFAULT 0)');
@@ -32,12 +33,22 @@ function createBakeryService({filename=':memory:',chain,now=()=>new Date().toISO
     if(rewarded)meta.rewardedRuns={day:new Date(timestamp()).toISOString().slice(0,10),used:allowance.used+1};
     meta.activeRunRewarded=rewarded;return rewarded;
   }
+  function runFor(meta,kind){return kind==='campaign'?meta.campaignRun:kind==='special'?meta.specialRun:null;}
+  function prepareLoot(meta,run,kind,level){
+    if(run.lootPlan?.level!==level){
+      const layout=kind==='special'?specialLayout(run.seed):null;
+      run.lootPlan=createIngredientLootPlan({runId:run.id,kind,level,eligible:run.rewarded,bricks:makeLevel(level,layout).bricks,now:timestamp(),featured:kind==='special'?run.ingredient:undefined,random:lootRandom});
+    }
+    meta.activeLootKind=kind;return run.lootPlan;
+  }
+  function currentLoot(meta){return publicIngredientLootPlan(runFor(meta,meta.activeLootKind)?.lootPlan);}
   function prepareMeta(meta){
     meta.rankedCooks??=0;meta.rankedRecipes??=[];
     // Points have not been spendable in earlier builds, so their saved balance
     // is also lifetime earnings. Unlike imported recipe totals, sales are server-owned.
     meta.pointsEarned??=meta.bakeryPoints||0;
     meta.specialTimes??={};
+    if(meta.specialRun)meta.specialRun.reached??=0;
     meta.liveOrders??=[];meta.saleReceipts??=[];meta.lastSales??={};
     return meta;
   }
@@ -64,7 +75,7 @@ function createBakeryService({filename=':memory:',chain,now=()=>new Date().toISO
       const context={meta,model,replace(value){raw=JSON.stringify(value);model=createRecipeBox(storage,Math.random,now);this.model=model;},raw:()=>JSON.parse(raw)};
       const result=fn(context);
       put.run(raw,JSON.stringify(meta),id);db.exec('COMMIT');
-      return {profile:{...context.model.snapshot(),bakeryPoints:meta.bakeryPoints,sales:meta.sales,specialClaims:[...meta.specialClaims],liveOrders:meta.liveOrders.map(order=>({...order})),saleReceipts:meta.saleReceipts.map(receipt=>({...receipt})),lastSales:{...meta.lastSales},saleTotals:{quantity:meta.sales,points:meta.pointsEarned},runAllowance:runAllowance(id,meta),activeRunRewarded:meta.activeRunRewarded===true},needsImport:!meta.initialized,result};
+      return {profile:{...context.model.snapshot(),bakeryPoints:meta.bakeryPoints,sales:meta.sales,specialClaims:[...meta.specialClaims],liveOrders:meta.liveOrders.map(order=>({...order})),saleReceipts:meta.saleReceipts.map(receipt=>({...receipt})),lastSales:{...meta.lastSales},saleTotals:{quantity:meta.sales,points:meta.pointsEarned},runAllowance:runAllowance(id,meta),activeRunRewarded:meta.activeRunRewarded===true,runLootPlan:currentLoot(meta)},needsImport:!meta.initialized,result};
     }catch(error){db.exec('ROLLBACK');throw error;}
   }
   function profile(id){return mutate(id,()=>undefined);}
@@ -94,14 +105,31 @@ function createBakeryService({filename=':memory:',chain,now=()=>new Date().toISO
         meta.initialized=true;
         const runId=context.model.startRun();
         meta.campaignRun={id:runId,version:CAMPAIGN_VERSION,startedAt:timestamp(),reached:0,time:0,rewarded:reserveRewardedRun(id,meta)};
+        prepareLoot(meta,meta.campaignRun,'campaign',0);
         return runId;
+      }
+      if(action==='prepareLevelLoot'){
+        const [runId,level,kind='campaign']=args,run=runFor(meta,kind);
+        if(!run||run.id!==runId||!Number.isInteger(level)||level<0||level>=(kind==='special'?1:LEVELS.length)||level!==run.reached||(kind==='campaign'&&run.version!==CAMPAIGN_VERSION))return failure('That level is not available for this run.');
+        return publicIngredientLootPlan(prepareLoot(meta,run,kind,level));
+      }
+      if(action==='collectIngredient'){
+        const [runId,level,pickupId,kind='campaign']=args,run=runFor(meta,kind),plan=run?.lootPlan;
+        if(!run||run.id!==runId||!Number.isInteger(level)||!plan||plan.level!==level||plan.runId!==runId||plan.kind!==kind||(kind==='campaign'&&run.version!==CAMPAIGN_VERSION)||(run.reached!==level&&run.reached!==level+1))return failure('That ingredient drop belongs to another level or run.');
+        if(!run.rewarded||!plan.eligible)return failure('Practice pickups do not enter your Pantry.');
+        if(timestamp()<plan.issuedAt+750||timestamp()>plan.expiresAt)return failure('That ingredient drop is not available now.');
+        const entry=typeof pickupId==='string'?plan.entries.find(item=>item.id===pickupId):null;
+        if(!entry)return failure('That ingredient drop was not issued for this run.');
+        if(plan.claimed.includes(pickupId))return failure('That ingredient was already collected.');
+        const result=context.model.collectIngredient(entry.ingredient);
+        if(result.ok)plan.claimed.push(pickupId);
+        return result;
       }
       if(action==='awardLevel'){
         const [runId,level,elapsed]=args,run=meta.campaignRun;
         if(!run||run.id!==runId||run.version!==CAMPAIGN_VERSION||!Number.isInteger(level)||level!==run.reached||level<0||level>=LEVELS.length||!validTime(elapsed,run.startedAt,run.time))return [];
         if(run.rewarded!==true){run.reached++;run.time=Math.round(elapsed*1000)/1000;return [];}
         const rewards=context.model.awardLevel(runId,level);
-        if(!rewards.length)return [];
         run.reached++;run.time=Math.round(elapsed*1000)/1000;
         const previous=meta.campaignBest;
         if(!previous||previous.version!==CAMPAIGN_VERSION||run.reached>previous.reached||(run.reached===previous.reached&&run.time<previous.time))meta.campaignBest={version:CAMPAIGN_VERSION,reached:run.reached,time:run.time};
@@ -142,7 +170,8 @@ function createBakeryService({filename=':memory:',chain,now=()=>new Date().toISO
       if(methods.includes(action)){meta.initialized=true;return context.model[action](...args);}
       if(action==='startSpecial'){
         if(!bakery?.special||args[0]!==bakery.special.seed)return failure('The Special Batch has changed. Refresh the bakery.');
-        meta.initialized=true;meta.specialRun={id:randomBytes(16).toString('hex'),seed:args[0],ingredient:bakery.special.ingredient,startedAt:timestamp(),rewarded:reserveRewardedRun(id,meta)};
+        meta.initialized=true;meta.specialRun={id:randomBytes(16).toString('hex'),seed:args[0],ingredient:bakery.special.ingredient,startedAt:timestamp(),reached:0,rewarded:reserveRewardedRun(id,meta)};
+        prepareLoot(meta,meta.specialRun,'special',0);
         return {ok:true,runId:meta.specialRun.id,...bakery.special,rewarded:meta.specialRun.rewarded};
       }
       if(action==='awardSpecial'){
@@ -156,11 +185,10 @@ function createBakeryService({filename=':memory:',chain,now=()=>new Date().toISO
         if(!Number.isFinite(best)||recorded<best)meta.specialTimes[run.seed]=recorded;
         if(meta.specialClaims.includes(run.seed)){
           meta.specialRun=null;
-          return {ok:true,rewards:[],message:!Number.isFinite(best)||recorded<best?'New Special Batch personal best!':'Special Batch recorded. Your ingredient reward was already collected.'};
+          return {ok:true,rewards:[],message:!Number.isFinite(best)||recorded<best?'New Special Batch personal best!':'Special Batch recorded. Your clear bonus was already collected.'};
         }
-        const data=context.raw();data.pantry[run.ingredient]+=3;data.xp+=20;
-        const ingredient=RecipeData.ingredients.find(i=>i.id===run.ingredient);
-        const rewards=[`+3 ${ingredient.name}`,'+20 baker XP'];
+        const data=context.raw();data.xp+=20;
+        const rewards=['+20 baker XP'];
         data.history.unshift({at:now(),message:`Special Batch: ${rewards.join(' · ')}`});data.history=data.history.slice(0,24);
         context.replace(data);meta.specialClaims.push(run.seed);meta.specialRun=null;
         return {ok:true,rewards,message:`Special Batch complete: ${rewards.join(' · ')}`};

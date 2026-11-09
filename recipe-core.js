@@ -1,11 +1,20 @@
 /* Persistent collection/baking economy. Independent of the game and DOM. */
 const RecipeData=(()=>{
-  const ingredients=[
-    {id:'flour',name:'Flour',icon:'🌾'},{id:'butter',name:'Butter',icon:'🧈'},
-    {id:'sugar',name:'Sugar',icon:'◇'},{id:'vanilla',name:'Vanilla',icon:'✿'},
-    {id:'cocoa',name:'Cocoa',icon:'🍫'},{id:'strawberry',name:'Strawberries',icon:'🍓'},
-    {id:'cinnamon',name:'Cinnamon',icon:'❧'},{id:'honey',name:'Honey',icon:'🍯'},
+  const rarities=[
+    {id:'common',name:'Common',color:'#91775b',weight:65,ingredientValue:1,restockCost:3},
+    {id:'uncommon',name:'Uncommon',color:'#648050',weight:25,ingredientValue:2,restockCost:6},
+    {id:'rare',name:'Rare',color:'#6683a7',weight:9,ingredientValue:4,restockCost:12},
+    {id:'epic',name:'Epic',color:'#9564a6',weight:1,ingredientValue:10,restockCost:30},
   ];
+  const loot={chance:.18,rarityWeights:Object.fromEntries(rarities.map(r=>[r.id,r.weight])),scrapChance:.05};
+  const ingredients=[
+    {id:'flour',name:'Flour',icon:'🌾',rarity:'common'},{id:'butter',name:'Butter',icon:'🧈',rarity:'common'},
+    {id:'sugar',name:'Sugar',icon:'◇',rarity:'common'},{id:'vanilla',name:'Vanilla',icon:'✿',rarity:'uncommon'},
+    {id:'cocoa',name:'Cocoa',icon:'🍫',rarity:'rare'},{id:'strawberry',name:'Strawberries',icon:'🍓',rarity:'rare'},
+    {id:'cinnamon',name:'Cinnamon',icon:'❧',rarity:'uncommon'},{id:'honey',name:'Honey',icon:'🍯',rarity:'rare'},
+    {id:'eggs',name:'Eggs',icon:'🥚',rarity:'common'},{id:'milk',name:'Milk',icon:'🥛',rarity:'uncommon'},
+    {id:'almond',name:'Almonds',icon:'🌰',rarity:'rare'},{id:'saffron',name:'Saffron',icon:'✺',rarity:'epic'},
+  ].map(ingredient=>{const rarity=rarities.find(r=>r.id===ingredient.rarity);return {...ingredient,image:`assets/ingredients/${ingredient.id}.png`,restockCost:rarity.restockCost,value:rarity.ingredientValue};});
   const recipes=[
     {id:'butter-paws',name:'Butter Paw Biscuits',flavor:'butter',description:'Little paw prints. A very big welcome.',needs:{flour:1,butter:1,sugar:1},yield:2},
     {id:'sugar-clouds',name:'Sugar Clouds',flavor:'sugar',description:'A soft snowfall over the cookie tin.',needs:{flour:1,butter:1,sugar:2},yield:3},
@@ -19,9 +28,18 @@ const RecipeData=(()=>{
     {id:'honey-hugs',name:'Honey Cinnamon Hugs',flavor:'cracker',description:'A warm blanket, in biscuit form.',needs:{flour:1,honey:1,cinnamon:1,butter:1},yield:2},
     {id:'marble-morsels',name:'Marble Morsels',flavor:'chocolate',description:'Chocolate and vanilla taking a little tumble.',needs:{flour:2,butter:1,cocoa:1,vanilla:1},yield:3},
     {id:'genesis-feast',name:'The Genesis Feast',flavor:'gift',description:'Every flavor in the bakery, together at last.',needs:{flour:2,butter:1,sugar:1,vanilla:1,cocoa:1,strawberry:1,cinnamon:1,honey:1},yield:4},
-  ];
+    {id:'egg-custard-cookies',name:'Golden Custard Cookies',flavor:'butter',description:'Soft golden middles for tiny paws.',needs:{flour:1,butter:1,sugar:1,eggs:1},yield:3},
+    {id:'milk-shortbread',name:'Milk Bottle Shortbread',flavor:'sugar',description:'A milky little biscuit for the tea tray.',needs:{flour:2,butter:1,milk:1},yield:3},
+    {id:'vanilla-mooncakes',name:'Vanilla Moon Bites',flavor:'sugar',description:'A moonlit snack with a vanilla heart.',needs:{flour:1,sugar:1,eggs:1,milk:1,vanilla:1},yield:3},
+    {id:'almond-crescents',name:'Almond Crescents',flavor:'butter',description:'Curled up like a sleepy hamster.',needs:{flour:1,butter:1,sugar:1,almond:1},yield:2},
+    {id:'cocoa-cream-puffs',name:'Cocoa Cream Puffs',flavor:'chocolate',description:'A cloud of cream with chocolate cheeks.',needs:{flour:1,eggs:1,milk:1,cocoa:1},yield:2},
+    {id:'berry-almond-kisses',name:'Berry Almond Kisses',flavor:'jam',description:'Sweet berry kisses and a nutty crunch.',needs:{flour:1,butter:1,strawberry:1,almond:1},yield:2},
+    {id:'saffron-sunbursts',name:'Saffron Sunbursts',flavor:'gift',description:'A tiny golden sunrise, fresh from the oven.',needs:{flour:2,butter:1,eggs:1,honey:1,saffron:1},yield:3},
+    {id:'royal-saffron-tarts',name:'Royal Burrow Tarts',flavor:'gift',description:'The bakery’s rarest little celebration.',needs:{flour:2,butter:1,milk:1,almond:1,vanilla:1,saffron:2},yield:3},
+  ].map(recipe=>{const tier=Math.max(...Object.keys(recipe.needs).map(id=>rarities.findIndex(r=>r.id===ingredients.find(i=>i.id===id).rarity)));return {...recipe,rarity:rarities[tier].id};});
   const titles=[{name:'Little Baker',orders:0},{name:'Cookie Companion',orders:3},{name:'Pantry Pro',orders:10},{name:'Master of Crumbs',orders:25}];
-  return {ingredients,recipes,titles};
+  function recipeValue(recipe){return Object.entries(recipe.needs).reduce((sum,[id,n])=>sum+n*ingredients.find(i=>i.id===id).value,0);}
+  return {ingredients,recipes,titles,rarities,loot,recipeValue};
 })();
 
 function createRecipeBox(storage,random=Math.random,now=()=>new Date().toISOString()){
@@ -75,21 +93,30 @@ function createRecipeBox(storage,random=Math.random,now=()=>new Date().toISOStri
   function startRun(){if(readOnly)return null;data.runCounter++;data.activeRun={id:data.runCounter,lastLevel:-1,loot:[]};save();return data.runCounter;}
   function awardLevel(runId,level){
     if(readOnly||!data.activeRun||data.activeRun.id!==runId||!Number.isInteger(level)||level<0||level>=campaignLength||level!==data.activeRun.lastLevel+1)return [];
-    data.activeRun.lastLevel=level;data.clears++;data.xp+=5;const rewards=[];
-    const common=pick(['flour','butter','sugar']);data.pantry[common]++;rewards.push(`+1 ${ingredients.find(i=>i.id===common).name}`);
-    const bonusRoll=random();
-    if(bonusRoll<.25||data.ingredientDry>=2){
-      const needed=known().flatMap(r=>Object.entries(r.needs).filter(([id,n])=>data.pantry[id]<n).map(([id])=>id));
-      const selected=needed.length&&random()<.7?pick(needed):pick(ingredients.map(i=>i.id));data.pantry[selected]++;rewards.push(`+1 ${ingredients.find(i=>i.id===selected).name}`);data.ingredientDry=0;
-    }else data.ingredientDry++;
+    data.activeRun.lastLevel=level;data.clears++;data.xp+=5;const rewards=['+5 XP'];
     const scrapRoll=random();
-    if(scrapRoll<.05||data.scrapDry>=7){
+    if(scrapRoll<RecipeData.loot.scrapChance){
       const missing=recipes.filter(r=>(data.recipes[r.id]?.scraps||0)<2);
-      if(missing.length){const recipe=pick(missing);const entry=data.recipes[recipe.id]??={scraps:0,discovered:null,firstBaked:null,batches:0};entry.scraps++;if(entry.scraps===2){entry.discovered=now();data.xp+=15;rewards.push(`Discovered: ${recipe.name}`);}else rewards.push(`Scrap: ${recipe.name} (1/2)`);}
+      if(missing.length){
+        const tiers=RecipeData.rarities.filter(tier=>missing.some(recipe=>recipe.rarity===tier.id));
+        let roll=random()*tiers.reduce((sum,tier)=>sum+tier.weight,0),tier=tiers[tiers.length-1];
+        for(const candidate of tiers){roll-=candidate.weight;if(roll<0){tier=candidate;break;}}
+        const recipe=pick(missing.filter(item=>item.rarity===tier.id));
+        const entry=data.recipes[recipe.id]??={scraps:0,discovered:null,firstBaked:null,batches:0};entry.scraps++;if(entry.scraps===2){entry.discovered=now();data.xp+=15;rewards.push(`Discovered: ${recipe.name}`);}else rewards.push(`Scrap: ${recipe.name} (1/2)`);
+      }
       else{data.stamps+=2;rewards.push('+2 stamps · all recipes found');}
       data.scrapDry=0;
     }else data.scrapDry++;
     data.activeRun.loot.push(...rewards);log(`Batch ${level+1}: ${rewards.join(' · ')}`);save();return rewards;
+  }
+  // Only the server's issued-pickup claim path may call this in online play.
+  function collectIngredient(id){
+    const ingredient=ingredients.find(item=>item.id===id);
+    if(readOnly)return {ok:false,rewards:[],message:warning};
+    if(!ingredient)return {ok:false,rewards:[],message:'Unknown ingredient.'};
+    data.pantry[id]++;const rewards=[`+1 ${ingredient.name}`];
+    if(data.activeRun)data.activeRun.loot.push(...rewards);
+    log(`Caught ${ingredient.name}`);save();return {ok:true,rewards,message:`Caught ${ingredient.name}!`};
   }
   function bake(id){
     const recipe=recipes.find(r=>r.id===id);
@@ -113,9 +140,11 @@ function createRecipeBox(storage,random=Math.random,now=()=>new Date().toISOStri
   // Stamps buy targeted ingredients: a deterministic escape from unlucky drops.
   function buyIngredient(id){
     if(readOnly)return {ok:false,message:warning};
-    if(!ingredients.some(i=>i.id===id)||data.stamps<3)return {ok:false,message:'Need 3 stamps.'};
-    data.stamps-=3;data.pantry[id]++;log(`Restock: +1 ${ingredients.find(i=>i.id===id).name}`);save();return {ok:true,message:'+1 ingredient.'};
+    const ingredient=ingredients.find(i=>i.id===id);
+    if(!ingredient)return {ok:false,message:'Unknown ingredient.'};
+    if(data.stamps<ingredient.restockCost)return {ok:false,message:`Need ${ingredient.restockCost} stamps.`};
+    data.stamps-=ingredient.restockCost;data.pantry[id]++;log(`Restock: +1 ${ingredient.name}`);save();return {ok:true,message:'+1 ingredient.'};
   }
-  return {snapshot,startRun,awardLevel,bake,fulfill,rename,buyIngredient};
+  return {snapshot,startRun,awardLevel,collectIngredient,bake,fulfill,rename,buyIngredient};
 }
 if(typeof module!=='undefined'&&module.exports)module.exports={RecipeData,createRecipeBox};

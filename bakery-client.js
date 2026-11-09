@@ -23,6 +23,8 @@ function createBakeryClient(storage,onChange){
   }
   return {snapshot:()=>profile,ready,request,settle:()=>queue.then(()=>ready),
     startRun:()=>command('startRun'),awardLevel:(id,level,elapsed)=>command('awardLevel',[id,level,elapsed]),
+    prepareLevelLoot:(id,level,kind='campaign')=>command('prepareLevelLoot',[id,level,kind]).then(result=>{if(result?.ok===false)throw new Error(result.message);return result;}),
+    collectIngredient:(id,level,pickup,kind='campaign')=>command('collectIngredient',[id,level,pickup,kind]),
     startSpecial:seed=>command('startSpecial',[seed]).then(result=>{if(!result.ok)throw new Error(result.message);return result.runId;}),
     awardSpecial:(id,elapsed)=>command('awardSpecial',[id,elapsed]),
     bake:id=>command('bake',[id]),fulfill:id=>command('fulfill',[id]),

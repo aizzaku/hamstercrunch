@@ -21,7 +21,7 @@ When the flow supplies verification values, add the DNS record to the domain, pa
 
 Suggested description:
 
-> Hamster Crunch: Genesis Block is a cozy hamster brick-breaker with 21 levels across three bakery chapters. Players collect ingredients, discover 12 recipes and bake treats. The bakery market opens only while fresh hardware telemetry reports Squeektoshi running. Confirmed settlement data seeds market prices and a shared Special Batch challenge. Seven shared leaderboards track arcade and bakery progress. Points only; no token or transaction required. Arcade rankings use basic validation and remain beta records.
+> Hamster Crunch: Genesis Block is a cozy hamster brick-breaker with 21 levels across three bakery chapters. Players collect ingredients, discover 20 recipes and bake treats. The bakery market opens only while fresh hardware telemetry reports Squeektoshi running. Confirmed settlement data seeds market prices and a shared Special Batch challenge. Seven shared leaderboards track arcade and bakery progress. Points only; no token or transaction required. Arcade rankings use basic validation and remain beta records.
 
 Keep the required Squeekchain verification records in place after approval. Do not invent verification values; obtain them from the actual submission flow.
 

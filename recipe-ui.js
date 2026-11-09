@@ -4,10 +4,13 @@ const RecipeProfile=(()=>{
   let tab='recipes',resume=false,filter='all',recipesView='recipes',ordersView='casual';
   const queueDrafts=new Map();
   const {recipes,ingredients}=RecipeData;
-  let activeRewarded=null,launchVersion=0;
+  let activeRewarded=null,activeLootPlan=null,launchVersion=0;
   function isRewardedRun(){return activeRewarded??model.snapshot().activeRunRewarded===true;}
   function canRewardRun(){const quota=model.snapshot().runAllowance;return !!quota&&!quota.walletRequired&&quota.remaining>0;}
-  function launchRun(start){const attempt=++launchVersion;activeRewarded=null;return Promise.resolve(start()).then(id=>{if(attempt===launchVersion){activeRewarded=model.snapshot().activeRunRewarded===true;updateRunMode();}return id;});}
+  function launchRun(start){const attempt=++launchVersion;activeRewarded=null;activeLootPlan=null;return Promise.resolve(start()).then(id=>{if(attempt===launchVersion){activeRewarded=model.snapshot().activeRunRewarded===true;activeLootPlan=model.snapshot().runLootPlan;updateRunMode();}return id;});}
+  function lootPlan(runId,level,kind='campaign'){const plan=activeLootPlan||model.snapshot().runLootPlan;return plan&&plan.runId===runId&&plan.level===level&&plan.kind===kind?plan:null;}
+  async function prepareLevelLoot(runId,level,kind='campaign'){activeLootPlan=await model.prepareLevelLoot(runId,level,kind);return activeLootPlan;}
+  async function collectIngredient(runId,level,pickup,kind='campaign'){try{const result=await model.collectIngredient(runId,level,pickup,kind);if(result.ok){showLoot(result.rewards||[]);notify(result.message);}else notify(result.message);return result;}catch(error){notify(`Catch could not save: ${error.message}`);return {ok:false};}}
   function runStatus(active=false){
     const data=model.snapshot(),quota=data.runAllowance;
     if(!quota)return 'Checking daily runs…';
@@ -21,10 +24,12 @@ const RecipeProfile=(()=>{
   function button(text,fn,disabled=false){const node=el('button','',text);node.type='button';node.disabled=disabled;node.addEventListener('click',async()=>{node.disabled=true;try{await fn();}catch(error){message(error.message);}finally{if(node.isConnected)render();}});return node;}
   function message(text){status.textContent=text;}
   function image(flavor){const frame=el('div',`recipe-art recipe-art-${flavor}`);frame.setAttribute('aria-hidden','true');return frame;}
+  function ingredientImage(ingredient){const image=el('img','ingredient-art');image.src=ingredient.image;image.alt='';image.loading='lazy';image.width=72;image.height=72;return image;}
+  function rarityBadge(id){const rarity=RecipeData.rarities.find(item=>item.id===id);return el('span',`rarity-badge rarity-${id}`,rarity?.name||id);}
   function renderHeader(data){
     document.querySelector('#baker-name').textContent=`${data.name}’s Bakery`;
     document.querySelector('#baker-title').textContent=`${data.title} · Lv ${data.bakerLevel}`;
-    document.querySelector('#recipe-stats').textContent=`${Object.values(data.recipes).filter(r=>r.scraps===2).length}/12 recipes · ${Object.values(data.recipes).filter(r=>r.firstBaked).length}/12 baked · ${data.ordersDone} ${data.ordersDone===1?'order':'orders'} · ${data.stamps} stamps`;
+    document.querySelector('#recipe-stats').textContent=`${Object.values(data.recipes).filter(r=>r.scraps===2).length}/${recipes.length} recipes · ${Object.values(data.recipes).filter(r=>r.firstBaked).length}/${recipes.length} baked · ${data.ordersDone} ${data.ordersDone===1?'order':'orders'} · ${data.stamps} stamps`;
     document.querySelector('#baker-xp').value=data.xp%50;
     document.querySelector('#baker-xp').setAttribute('aria-label',`${data.xpNext} experience to next baker level`);
     document.querySelector('#recipe-save').textContent=data.warning||'Saved';
@@ -41,7 +46,7 @@ const RecipeProfile=(()=>{
     const grid=el('div','recipe-grid');
     for(const recipe of recipes){
       const entry=data.recipes[recipe.id],known=entry?.scraps===2;if(filter==='known'&&!known)continue;
-      const card=el('article',`recipe-card ${known?'':'undiscovered'}`);card.append(image(recipe.flavor));
+      const card=el('article',`recipe-card ${known?'':'undiscovered'} tier-${recipe.rarity}`);card.append(image(recipe.flavor),rarityBadge(recipe.rarity));
       card.append(el('span','recipe-ribbon',entry?.firstBaked?'Collected':known?'Discovered':`${entry?.scraps||0}/2 scraps`),el('h3','',recipe.name));
       if(known){
         card.append(requirements(recipe,data));
@@ -55,8 +60,9 @@ const RecipeProfile=(()=>{
     content.append(grid);
   }
   function renderPantry(data){
-    content.append(el('p','recipe-explainer','Your ingredients. Clear levels to collect more, or restock for 3 stamps.'));
-    const grid=el('div','pantry-grid');for(const i of ingredients){const card=el('article','pantry-card');card.append(el('span','ingredient-icon',i.icon),el('h3','',i.name),el('strong','pantry-count',String(data.pantry[i.id])),button('Restock · 3 stamps',async()=>{const result=await model.buyIngredient(i.id);message(result.message);render();},data.stamps<3||data.readOnly));grid.append(card);}content.append(grid);
+    content.append(el('p','recipe-explainer','Your ingredients. Catch drops in rewarded runs: each broken food block has an 18% chance. No guaranteed drops.'));
+    content.append(el('p','loot-odds','Drops: Common 65% · Uncommon 25% · Rare 9% · Epic 1%. These are shares of ingredient drops.'));
+    const grid=el('div','pantry-grid');for(const i of ingredients){const card=el('article',`pantry-card tier-${i.rarity}`);card.append(ingredientImage(i),rarityBadge(i.rarity),el('h3','',i.name),el('strong','pantry-count',String(data.pantry[i.id])),button(`Restock · ${i.restockCost} stamps`,async()=>{const result=await model.buyIngredient(i.id);message(result.message);render();},data.stamps<i.restockCost||data.readOnly));grid.append(card);}content.append(grid);
   }
   function renderOrders(data){
     content.append(subnav('Order sections',[{id:'casual',label:'Casual'},{id:'live',label:`Live${data.liveOrders?.length?' · '+data.liveOrders.length:''}`}],ordersView,id=>{ordersView=id;render();if(id==='live')refreshLiveOrders();}));
@@ -107,7 +113,7 @@ const RecipeProfile=(()=>{
   }
   function renderCollection(data){
     content.append(el('p','recipe-explainer','Bake once. Keep the card forever.'));
-    const grid=el('div','recipe-grid collection-grid');for(const recipe of recipes){const entry=data.recipes[recipe.id],complete=!!entry?.firstBaked,card=el('article',`recipe-card ${complete?'collected':'undiscovered'}`);card.append(image(recipe.flavor),el('span','recipe-ribbon',complete?'Collected':'Uncollected'),el('h3','',recipe.name),el('small','',complete?`${entry.batches} ${entry.batches===1?'batch':'batches'} baked`:`${entry?.scraps||0}/2 scraps`));grid.append(card);}content.append(grid);
+    const grid=el('div','recipe-grid collection-grid');for(const recipe of recipes){const entry=data.recipes[recipe.id],complete=!!entry?.firstBaked,card=el('article',`recipe-card ${complete?'collected':'undiscovered'} tier-${recipe.rarity}`);card.append(image(recipe.flavor),rarityBadge(recipe.rarity),el('span','recipe-ribbon',complete?'Collected':'Uncollected'),el('h3','',recipe.name),el('small','',complete?`${entry.batches} ${entry.batches===1?'batch':'batches'} baked`:`${entry?.scraps||0}/2 scraps`));grid.append(card);}content.append(grid);
   }
   function renderProfile(data){
     content.append(el('p','recipe-explainer','Your baker name, progress and recent activity.'));
@@ -153,7 +159,7 @@ const RecipeProfile=(()=>{
     if(view.special){
       const ingredient=ingredients.find(i=>i.id===view.special.ingredient);
       const practice=!!data.runAllowance&&!canRewardRun();
-      const card=el('article','special-batch');card.append(el('span','eyebrow','SPECIAL BATCH'),el('h3','',ingredient?.name||view.special.ingredient),el('p','',practice?'Practice · no rewards or ranking':'+3 ingredients · +20 XP'));
+      const card=el('article','special-batch');card.append(el('span','eyebrow','SPECIAL BATCH'),el('h3','',ingredient?.name||view.special.ingredient),el('p','',practice?'Practice · no rewards or ranking':'Chance ingredient drops · +20 XP on first clear'));
       const claimed=(data.specialClaims||[]).includes(view.special.seed);card.append(el('small','',practice?(data.runAllowance.walletRequired?'Connect a wallet for rewarded runs.':'Daily rewarded runs used. Resets 00:00 UTC.'):claimed?'Reward claimed. Beat your time.':'Reward once per round.'),button(practice?'Play practice ✦':claimed?'Beat your time ✦':'Play special ✦',()=>{resume=false;dialog.close();startSpecialBatch(view.special);},data.readOnly));content.append(card);
     }
     const grid=el('div','recipe-grid');
@@ -167,6 +173,6 @@ const RecipeProfile=(()=>{
   model.ready.then(refreshBakery).catch(error=>message(error.message));
   setInterval(()=>{if(!dialog.open||['INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName))return;if(tab==='market')refreshBakery();else if(tab==='orders'&&ordersView==='live')refreshLiveOrders();},15000);
   render();
-  return {runStatus,isRewardedRun,canRewardRun,settle:()=>model.settle(),isOpen:()=>dialog.open,startRun:()=>{document.querySelector('#run-loot').hidden=true;return launchRun(()=>model.startRun());},awardLevel,open,openMarket:()=>openPanel('market'),openLiveOrders:()=>{openPanel('orders');ordersView='live';render();refreshLiveOrders();},
+  return {runStatus,isRewardedRun,canRewardRun,lootPlan,prepareLevelLoot,collectIngredient,settle:()=>model.settle(),isOpen:()=>dialog.open,startRun:()=>{document.querySelector('#run-loot').hidden=true;return launchRun(()=>model.startRun());},awardLevel,open,openMarket:()=>openPanel('market'),openLiveOrders:()=>{openPanel('orders');ordersView='live';render();refreshLiveOrders();},
     startSpecial:seed=>{const run=launchRun(()=>model.startSpecial(seed));run.catch(error=>notify(error.message));return run;},awardSpecial:async (id,elapsed)=>{try{const result=await model.awardSpecial(id,elapsed);showLoot(result.rewards||[]);notify(result.message);}catch(error){notify(error.message);}}};
 })();

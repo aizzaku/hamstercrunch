@@ -21,9 +21,24 @@ let soundEnabled=true,audio=null,storageWarning=false,records=readRecords();
 let zoomCharge=0,zoomLeft=0,menuPaused=false,cleanupAnnounced=false;
 let recipeRunId=null,specialBatch=null;
 let rallyTime=0;
+let ingredientPlanKey=null,ingredientPlan=new Map(),clearPending=false,clearCatchTime=0;
+function installIngredientPlan(){
+  if(typeof RecipeProfile==='undefined'||!RecipeProfile.lootPlan)return;
+  const kind=specialBatch?'special':'campaign',plan=RecipeProfile.lootPlan(recipeRunId,level,kind);
+  if(!plan)return;
+  const key=`${kind}:${recipeRunId}:${level}`;if(ingredientPlanKey===key)return;
+  ingredientPlanKey=key;ingredientPlan=new Map(plan.entries.map(entry=>[entry.brickId,{...entry,eligible:plan.eligible}]));
+}
+function dropIngredient(brick){const id=bricks.indexOf(brick),entry=ingredientPlan.get(id);if(!entry)return;ingredientPlan.delete(id);drops.push({x:brick.x+brick.w/2,y:brick.y+brick.h/2,ingredient:entry.ingredient,rarity:entry.rarity,pickupId:entry.id,eligible:entry.eligible});}
+function catchIngredient(drop){
+  const ingredient=typeof RecipeData!=='undefined'?RecipeData.ingredients.find(item=>item.id===drop.ingredient):null;
+  burst(drop.x,paddle.y,'#e8be73',8);
+  if(drop.eligible&&typeof RecipeProfile!=='undefined'&&RecipeProfile.collectIngredient){RecipeProfile.collectIngredient(recipeRunId,level,drop.pickupId,specialBatch?'special':'campaign');}
+  else notify(`Practice catch · ${ingredient?.name||drop.ingredient}`);
+}
 function currentLayout(){return specialBatch?specialLayout(specialBatch.seed):LEVELS[level];}
 function rallySpeed(){return currentLayout().speed*(1+Math.min(.75,rallyTime*.03));}
-function startSpecialBatch(batch){reset();specialBatch=batch;loadLevel(0);const practice=typeof RecipeProfile!=='undefined'&&RecipeProfile.canRewardRun&&!RecipeProfile.canRewardRun();overlay("SQUEEKTOSHI’S SPECIAL BATCH","A special<br>little batch.",practice?'Practice tray. No rewards or ranking.':'Clear the tray. Earn ingredients.',"LET’S CRUNCH");}
+function startSpecialBatch(batch){reset();specialBatch=batch;loadLevel(0);const practice=typeof RecipeProfile!=='undefined'&&RecipeProfile.canRewardRun&&!RecipeProfile.canRewardRun();overlay("SQUEEKTOSHI’S SPECIAL BATCH","A special<br>little batch.",practice?'Practice tray. No rewards or ranking.':'Catch ingredients. Clear for bonus XP.',"LET’S CRUNCH");}
 function piercing(){return fireLeft>0||zoomLeft>0;}
 function activateZoomies(){
   if(state!=='playing'||zoomCharge<100||zoomLeft>0)return false;
@@ -107,6 +122,7 @@ function newBall(x,y,vx=120,vy=-300) {return {x,y,r:12,vx,vy,rotation:0,trail:[]
 function dock() {balls=[newBall(paddle.x+paddle.w/2,paddle.y-16,120,-Math.sqrt(currentLayout().speed**2-120**2))];}
 function clearEffects() {rallyTime=0;wideLeft=0;slowLeft=0;fireLeft=0;zoomLeft=0;shield=false;drops=[];combo=0;comboLeft=0;}
 function loadLevel(index) {
+  ingredientPlanKey=null;ingredientPlan=new Map();clearPending=false;clearCatchTime=0;
   level=index;const generated=makeLevel(index,specialBatch?currentLayout():null);bricks=generated.bricks;obstacles=generated.obstacles;
   clearEffects();cleanupAnnounced=false;paddle.w=generated.width;paddle.x=(W-paddle.w)/2;levelTime=0;worldTime=0;kills=0;powerCursor=0;particles=[];keys.clear();dock();state='ready';ui.overlay.hidden=true;
   notify(`${specialBatch?'SPECIAL':`${index+1} / ${LEVELS.length}`} · ${generated.name.toUpperCase()}`);sync();
@@ -121,20 +137,21 @@ function action() {
   if(state==='cleared'){loadLevel(level+1);return;}
   if(['intro','won','lost'].includes(state))reset();
   if(state==='ready'){
-    if(!started&&typeof RecipeProfile!=='undefined'){
-      const pending=specialBatch?RecipeProfile.startSpecial(specialBatch.seed):RecipeProfile.startRun();recipeRunId=pending;
+    if(typeof RecipeProfile!=='undefined'&&(!started||(RecipeProfile.prepareLevelLoot&&!ingredientPlanKey))){
+      const previousRun=recipeRunId;
+      const pending=!started?(specialBatch?RecipeProfile.startSpecial(specialBatch.seed):RecipeProfile.startRun()):Promise.resolve(RecipeProfile.prepareLevelLoot(previousRun,level,specialBatch?'special':'campaign')).then(()=>previousRun);recipeRunId=pending;
       if(pending&&typeof pending.then==='function'){
         state='connecting';ui.play.disabled=true;
         overlay('WARMING THE OVEN','One little<br>moment…','Connecting…','CONNECTING');
         pending.then(id=>{if(state!=='connecting'||recipeRunId!==pending)return;recipeRunId=id;ui.play.disabled=false;beginPlay();})
-          .catch(error=>{if(state!=='connecting'||recipeRunId!==pending)return;ui.play.disabled=false;state='ready';overlay('BAKERY CONNECTION PAUSED','Try<br>again?',error.message,'RETRY');});
+          .catch(error=>{if(state!=='connecting'||recipeRunId!==pending)return;recipeRunId=previousRun;ui.play.disabled=false;state='ready';overlay('BAKERY CONNECTION PAUSED','Try<br>again?',error.message,'RETRY');});
         return;
       }
     }
     beginPlay();
   }
 }
-function beginPlay(){state='playing';started=true;ui.overlay.hidden=true;tone(600,.08);sync();}
+function beginPlay(){installIngredientPlan();state='playing';started=true;ui.overlay.hidden=true;tone(600,.08);sync();}
 function pause() {
   if(state==='playing'){state='paused';keys.clear();overlay('TAKE A BREATHER','Snack<br>break.','Timer paused.','KEEP CRUNCHING');}
   else if(state==='paused')action();
@@ -145,6 +162,7 @@ function renderSplits() {
   splits.forEach((split,i)=>{const row=document.createElement('div');row.className='record-row';const label=document.createElement('span');label.textContent=`${String(i+1).padStart(2,'0')} ${LEVELS[i].name}`;const time=document.createElement('strong');time.textContent=formatTime(split);row.append(label,time);ui.splits.append(row);});
 }
 function finishLevel() {
+  clearPending=false;clearCatchTime=0;
   if(specialBatch){
     if(typeof RecipeProfile!=='undefined')RecipeProfile.awardSpecial(recipeRunId,runTime);
     state='won';saved=true;tone(1000,.25,'triangle');
@@ -174,6 +192,7 @@ function hitBrick(b,hamster,blast=false) {
   burst(hamster.x,hamster.y,b.explosive?'#ff9d6f':COLORS[b.row%COLORS.length],b.hp>0?4:10);shake=Math.max(shake,b.hp>0?.18:.42);
   if(b.hp>0){foodSound(b,true);return;}
   b.alive=false;combo=comboLeft>0?Math.min(combo+1,8):1;comboLeft=2.5;score+=10*combo;kills++;
+  dropIngredient(b);
   foodSound(b);
   if(kills%4===0){const power=POWERS[powerCursor%POWERS.length];powerCursor++;drops.push({x:b.x+b.w/2,y:b.y+b.h/2,power});}
   if(b.explosive){
@@ -182,7 +201,10 @@ function hitBrick(b,hamster,blast=false) {
     for(const nearby of bricks){if(nearby.alive&&Math.abs(nearby.x-b.x)<=92&&Math.abs(nearby.y-b.y)<=35)hitBrick(nearby,{x:nearby.x+nearby.w/2,y:nearby.y+nearby.h/2},true);}
   }
   const remaining=bricks.filter(brick=>brick.alive).length;
-  if(remaining===0&&state==='playing')finishLevel();
+  if(remaining===0&&state==='playing'){
+    if(drops.some(drop=>drop.ingredient)){if(!clearPending){clearPending=true;clearCatchTime=0;notify('Catch the last ingredients · SPACE to finish');}}
+    else finishLevel();
+  }
   else if(remaining>0&&remaining<=3&&!cleanupAnnounced){cleanupAnnounced=true;notify('LAST CRUMBS · Aim assist on');}
   sync();
 }
@@ -212,7 +234,7 @@ function step(dt) {
   worldTime+=dt;wideLeft=Math.max(0,wideLeft-dt);slowLeft=Math.max(0,slowLeft-dt);fireLeft=Math.max(0,fireLeft-dt);zoomLeft=Math.max(0,zoomLeft-dt);comboLeft=Math.max(0,comboLeft-dt);shake=Math.max(0,shake-dt*24);
   if(!wideLeft&&paddle.w!==currentLayout().width){const center=paddle.x+paddle.w/2;paddle.w=currentLayout().width;paddle.x=Math.max(0,Math.min(W-paddle.w,center-paddle.w/2));}
   obstacles.forEach(o=>{if(o.moving)o.x=o.baseX+Math.sin(worldTime*1.1+o.phase)*90;});
-  for(const b of balls){
+  for(const b of clearPending?[]:balls){
     const px=b.x,py=b.y,factor=slowLeft>0?.68:1;b.x+=b.vx*dt*factor;b.y+=b.vy*dt*factor;b.rotation+=b.vx*dt*.014;
     if(b.x<b.r){b.x=b.r;b.vx=Math.abs(b.vx);}
     if(b.x>W-b.r){b.x=W-b.r;b.vx=-Math.abs(b.vx);}
@@ -228,9 +250,10 @@ function step(dt) {
   }
   if(state!=='playing')return;
   balls=balls.filter(b=>b.y-b.r<=H);
-  if(!balls.length){lives--;clearEffects();paddle.w=currentLayout().width;paddle.x=Math.min(paddle.x,W-paddle.w);tone(110,.25,'triangle');if(!lives){state='lost';saveRun();overlay('THE HAMSTER GOT AWAY','Still<br>hungry?',`${splits.length} cleared · ${formatTime(runTime)} · ${score} points`,'TRY AGAIN');}else{state='ready';dock();notify('SPACE / TAP to relaunch');}sync();return;}
-  for(const drop of drops){drop.y+=125*dt;if(drop.y+12>=paddle.y&&drop.y-12<=paddle.y+paddle.h&&drop.x+12>paddle.x&&drop.x-12<paddle.x+paddle.w){applyPower(drop.power.id);drop.caught=true;}}
+  if(!balls.length&&!clearPending){lives--;clearEffects();paddle.w=currentLayout().width;paddle.x=Math.min(paddle.x,W-paddle.w);tone(110,.25,'triangle');if(!lives){state='lost';saveRun();overlay('THE HAMSTER GOT AWAY','Still<br>hungry?',`${splits.length} cleared · ${formatTime(runTime)} · ${score} points`,'TRY AGAIN');}else{state='ready';dock();notify('SPACE / TAP to relaunch');}sync();return;}
+  for(const drop of drops){drop.y+=125*dt;if(drop.y+12>=paddle.y&&drop.y-12<=paddle.y+paddle.h&&drop.x+12>paddle.x&&drop.x-12<paddle.x+paddle.w){if(drop.ingredient)catchIngredient(drop);else applyPower(drop.power.id);drop.caught=true;}}
   drops=drops.filter(d=>!d.caught&&d.y<H+20);
+  if(clearPending){clearCatchTime+=dt;if(!drops.some(drop=>drop.ingredient)||clearCatchTime>=4){finishLevel();return;}}
   for(const p of particles){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=250*dt;p.life-=dt;}particles=particles.filter(p=>p.life>0);
 }
 function hamster(b) {
@@ -282,7 +305,7 @@ document.addEventListener('keydown',event=>{
   if(event.target instanceof HTMLButtonElement&&[' ','Enter'].includes(event.key))return;
   const key=event.key.length===1?event.key.toLowerCase():event.key;if(['ArrowLeft','ArrowRight',' ','a','d','p','r'].includes(key))event.preventDefault();keys.add(key);if(event.repeat)return;
   if(ui.details.open){if(key==='Escape')closeMenu();return;}
-  if(key===' '){if(state==='playing')activateZoomies();else action();}if(key==='p')pause();if(key==='r')reset();
+  if(key===' '){if(clearPending)finishLevel();else if(state==='playing')activateZoomies();else action();}if(key==='p')pause();if(key==='r')reset();
 });
 document.addEventListener('keyup',event=>keys.delete(event.key.length===1?event.key.toLowerCase():event.key));
 window.addEventListener('blur',()=>{keys.clear();if(state==='playing')pause();});document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='playing')pause();});

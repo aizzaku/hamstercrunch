@@ -47,6 +47,20 @@ async function stop(){if(child&&child.exitCode===null){const closed=once(child,'
   for(let used=1;used<=5;used++){
     const launched=await post('/api/profile',{action:'startRun'},signed.cookie);
     assert.equal(launched.data.profile.activeRunRewarded,true);assert.equal(launched.data.profile.runAllowance.used,used);
+    assert.equal(launched.data.profile.runLootPlan.runId,launched.data.result);
+    if(used===1){
+      const plan=launched.data.profile.runLootPlan;
+      const prepared=await post('/api/profile',{action:'prepareLevelLoot',args:[launched.data.result,0,'campaign']},signed.cookie);
+      assert.deepEqual(prepared.data.result,plan);
+      const entry=plan.entries[0];
+      if(entry){
+        await new Promise(resolve=>setTimeout(resolve,800));
+        const caught=await post('/api/profile',{action:'collectIngredient',args:[launched.data.result,0,entry.id,'campaign']},signed.cookie);
+        assert.equal(caught.data.result.ok,true);assert.equal(caught.data.profile.pantry[entry.ingredient],launched.data.profile.pantry[entry.ingredient]+1);
+        const duplicate=await post('/api/profile',{action:'collectIngredient',args:[launched.data.result,0,entry.id,'campaign']},signed.cookie);
+        assert.equal(duplicate.data.result.ok,false);
+      }
+    }
   }
   await stop();origin=await start();
   const extra=await post('/api/profile',{action:'startRun'},signed.cookie);
@@ -61,6 +75,7 @@ async function stop(){if(child&&child.exitCode===null){const closed=once(child,'
   const replay=await post('/api/auth/verify',{message:challenge.data.message,signature},signed.cookie);assert.equal(replay.status,400);
   const range=await fetch(origin+'/assets/music/burrow-comfort.mp3',{headers:{Range:'bytes=0-99'}});assert.equal(range.status,206);assert.equal((await range.arrayBuffer()).byteLength,100);assert.match(range.headers.get('cache-control'),/max-age/);
   assert.equal((await fetch(origin+'/radio.css')).status,200);assert.equal((await fetch(origin+'/walletconnect-provider.js')).status,200);
+  for(const ingredient of require('./recipe-core.js').RecipeData.ingredients){const image=await fetch(origin+'/'+ingredient.image);assert.equal(image.status,200);assert.equal(image.headers.get('content-type'),'image/png');}
 
   console.log('PASS production port, healthcheck, Secure cookies, persistent data, wallet quota, practice exclusions, rankings, signatures and reserved live orders');
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(stop);

@@ -34,10 +34,13 @@ function createBatch(settlement){
   if(!settlement)return {seed:null,special:null,offers:[]};
   const seed=`${settlement.chainId}:${settlement.transactionHash}:${settlement.round}`;
   const bytes=createHash('sha256').update(`hamster-crunch-genesis-v1:${seed}`).digest();
-  const ingredient=RecipeData.ingredients[bytes[0]%RecipeData.ingredients.length].id;
+  let rarityRoll=bytes[0]/256*100,rarity=RecipeData.rarities[RecipeData.rarities.length-1];
+  for(const candidate of RecipeData.rarities){rarityRoll-=candidate.weight;if(rarityRoll<0){rarity=candidate;break;}}
+  const featured=RecipeData.ingredients.filter(item=>item.rarity===rarity.id);
+  const ingredient=featured[bytes[31]%featured.length].id;
   const offers=RecipeData.recipes.map((recipe,index)=>{
     const multiplier=75+bytes[index+1]%76;
-    const base=Math.max(3,Math.ceil(Object.values(recipe.needs).reduce((sum,n)=>sum+n,0)*3/recipe.yield));
+    const base=Math.max(3,Math.ceil(RecipeData.recipeValue(recipe)*3/recipe.yield));
     return {recipe:recipe.id,price:Math.max(1,Math.round(base*multiplier/100)),rangeMin:Math.max(1,Math.round(base*.75)),rangeMax:Math.max(1,Math.round(base*1.5)),demand:multiplier>=125?'Craving':multiplier<=90?'Quiet':'Steady'};
   });
   return {seed,special:{seed,ingredient},offers};

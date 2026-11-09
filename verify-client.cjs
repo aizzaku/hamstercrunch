@@ -12,6 +12,8 @@ async function main(){
     const input=options.body?JSON.parse(options.body):null;calls.push(input?.action||url);
     if(input?.action==='startRun')return {ok:true,json:async()=>({profile,result:42})};
     if(input?.action==='awardLevel'){check('Clear resolves its server-created run ID',input.args[0]===42&&input.args[2]===12.5);return {ok:true,json:async()=>({profile,result:['+1 Flour']})};}
+    if(input?.action==='prepareLevelLoot'){check('Level plan is bound to the current run, level and mode',input.args.join(',')==='42,1,campaign');return {ok:true,json:async()=>({profile,result:{runId:42,kind:'campaign',level:1,eligible:true,entries:[{id:'issued-token',brickId:3,ingredient:'flour',rarity:'common'}]}})};}
+    if(input?.action==='collectIngredient'){check('Pickup claim sends the issued token instead of an ingredient amount',input.args.join(',')==='42,1,issued-token,campaign');return {ok:true,json:async()=>({profile,result:{ok:true,rewards:['+1 Flour']}})};}
     return {ok:true,json:async()=>({profile,needsImport:!input,result:{ok:true}})};
   }});
   vm.runInContext(fs.readFileSync('bakery-client.js','utf8'),context);
@@ -22,6 +24,8 @@ async function main(){
   check('Commands stay in order',calls.slice(-2).join(',')==='startRun,awardLevel');
   check('Server changes notify UI',changes===4);
   check('Original local collection remains available',JSON.parse(storage.getItem('hamster-crunch-recipe-box-v1')).name==='Pip');
+  const prepared=await client.prepareLevelLoot(run,1);const caught=await client.collectIngredient(run,1,prepared.entries[0].id);
+  check('Level preparation and catches stay serialized',calls.slice(-2).join(',')==='prepareLevelLoot,collectIngredient'&&caught.ok);
   context.fetch=async()=>{throw new Error('Connection lost');};
   const offline=context.createBakeryClient(storage,()=>{});await offline.ready.catch(()=>{});
   check('Offline profile cannot silently grant local-only rewards',offline.snapshot().readOnly&&offline.snapshot().warning.includes('Connection lost'));
